@@ -12,6 +12,7 @@ import { formatMoney, formatShortDateLabel } from "@/lib/format";
 import { Money } from "@/components/Money";
 import { NetWorthLines } from "@/components/NetWorthLines";
 import { EmptyState } from "@/components/EmptyState";
+import { RefreshPricesButton } from "@/components/RefreshPricesButton";
 import { BTN_DASHED, BTN_SOLID, INPUT, LABEL, LINK_QUIET, ROW } from "@/lib/ui";
 
 const NO_MARKET_TYPES = new Set(["Cash", "Liabilities"]);
@@ -79,7 +80,10 @@ export default async function NetWorthPage() {
       </section>
 
       <section>
-        <h2 className="mb-3 font-display text-[22px] font-medium text-ink">Accounts</h2>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-display text-[22px] font-medium text-ink">Accounts</h2>
+          <RefreshPricesButton symbols={Array.from(new Set(holdings.map((h) => h.symbol)))} />
+        </div>
 
         {accounts.length === 0 ? (
           <EmptyState emoji="🏦" title="No accounts yet" hint="Add your first one below." />

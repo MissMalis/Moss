@@ -8,6 +8,7 @@ const NAV = [
   { href: "/net-worth", label: "Net worth" },
   { href: "/recurring", label: "Recurring" },
   { href: "/income", label: "Income" },
+  { href: "/cards", label: "Cards" },
   { href: "/history", label: "History" },
   { href: "/settings", label: "Settings" },
 ];

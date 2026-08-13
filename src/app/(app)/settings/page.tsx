@@ -1,7 +1,7 @@
 import { getSettings } from "@/lib/data/settings";
-import { updateSettings } from "@/lib/actions/settings";
+import { updateSettings, saveApiKey, removeApiKey } from "@/lib/actions/settings";
 import { Tooltip } from "@/components/Tooltip";
-import { BTN_SOLID, CARD, INPUT, LABEL } from "@/lib/ui";
+import { BTN_GHOST, BTN_SOLID, CARD, INPUT, LABEL, LINK_QUIET } from "@/lib/ui";
 
 export default async function SettingsPage() {
   const settings = await getSettings();
@@ -46,20 +46,80 @@ export default async function SettingsPage() {
       <section>
         <h2 className="font-display text-[22px] font-medium text-ink">Connections</h2>
         <p className="mt-1 text-[13px] text-ink-2">
-          Market data and the Gemini advisor connect here once those modules are built — keys
-          stay server-side, never in the browser.
+          Keys are written straight to Supabase Vault and never read back to this page — once
+          saved, you&apos;ll only ever see &quot;connected&quot;.
         </p>
-        <div className={`mt-4 flex flex-col gap-3 opacity-60 ${CARD}`}>
-          <div className="flex items-center justify-between">
-            <span className="text-[14px] text-ink-2">Market data key</span>
-            <span className="text-[12.5px] text-ink-3">Not connected yet</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-[14px] text-ink-2">Gemini advisor key</span>
-            <span className="text-[12.5px] text-ink-3">Not connected yet</span>
-          </div>
+        <div className={`mt-4 flex flex-col gap-4 ${CARD}`}>
+          <ApiKeyRow
+            label="Market data key"
+            keyType="market"
+            connected={settings.market_key_set}
+            hint="Powers live holding prices (Finnhub)."
+          />
+          <div className="border-t border-border" />
+          <ApiKeyRow
+            label="Gemini advisor key"
+            keyType="gemini"
+            connected={settings.gemini_key_set}
+            hint="Powers the Ask Moss advisor."
+          />
         </div>
       </section>
+    </div>
+  );
+}
+
+function ApiKeyRow({
+  label,
+  keyType,
+  connected,
+  hint,
+}: {
+  label: string;
+  keyType: "market" | "gemini";
+  connected: boolean;
+  hint: string;
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-[14px] text-ink">{label}</p>
+          <p className="text-[12px] text-ink-3">{hint}</p>
+        </div>
+        {connected && (
+          <span className="text-[12.5px] text-good">•••• connected</span>
+        )}
+      </div>
+      <details className="mt-2">
+        <summary className="cursor-pointer text-[13px] text-ink-3 hover:text-ink-2">
+          {connected ? "Replace key" : "Connect"}
+        </summary>
+        <div className="mt-2 flex items-center gap-2">
+          <form action={saveApiKey} className="flex items-center gap-2">
+            <input type="hidden" name="key_type" value={keyType} />
+            <input
+              type="password"
+              name="value"
+              required
+              placeholder="Paste key"
+              autoComplete="off"
+              className={`w-56 py-1.5 ${INPUT}`}
+            />
+            <button type="submit" className={`${BTN_GHOST} py-1.5`}>
+              Save
+            </button>
+          </form>
+          {connected && (
+            <form action={removeApiKey}>
+              <input type="hidden" name="key_type" value={keyType} />
+              <button type="submit" className={LINK_QUIET}>
+                Remove
+              </button>
+            </form>
+          )}
+        </div>
+      </details>
     </div>
   );
 }

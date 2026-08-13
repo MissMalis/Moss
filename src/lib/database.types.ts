@@ -43,6 +43,8 @@ export interface Database {
         is_system: boolean;
         system_key: string | null;
         starting_contributed: number;
+        is_forbidden_money: boolean;
+        reconciled_balance: number | null;
         created_at: string;
       }>;
       holdings: Row<{
@@ -144,8 +146,51 @@ export interface Database {
         market_value: number;
         created_at: string;
       }>;
+      cards: Row<{
+        id: string;
+        user_id: string;
+        name: string;
+        last4: string | null;
+        network: string | null;
+        color: string;
+        base_multiplier: number;
+        created_at: string;
+      }>;
+      card_category_multipliers: Row<{
+        id: string;
+        user_id: string;
+        card_id: string;
+        category_id: string;
+        multiplier: number;
+        created_at: string;
+      }>;
+      card_charges: Row<{
+        id: string;
+        user_id: string;
+        card_id: string;
+        category_id: string | null;
+        name: string;
+        amount: number;
+        spent_on: string;
+        swept: boolean;
+        swept_at: string | null;
+        created_at: string;
+      }>;
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      set_user_secret: {
+        Args: { secret_name: string; secret_value: string };
+        Returns: void;
+      };
+      get_user_secret: {
+        Args: { secret_name: string };
+        Returns: string | null;
+      };
+      delete_user_secret: {
+        Args: { secret_name: string };
+        Returns: void;
+      };
+    };
   };
 }

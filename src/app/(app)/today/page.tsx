@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getTodaySnapshot } from "@/lib/data/today";
 import { getNetWorthSummary } from "@/lib/data/net-worth-summary";
+import { getSettings } from "@/lib/data/settings";
 import { createPurchase, deletePurchase, postPaycheck } from "@/lib/actions/income";
 import { formatDateRange, formatMoney, formatShortDateLabel } from "@/lib/format";
 import { Money } from "@/components/Money";
@@ -8,6 +9,7 @@ import { Tooltip } from "@/components/Tooltip";
 import { SpendingRing } from "@/components/SpendingRing";
 import { NetWorthLines } from "@/components/NetWorthLines";
 import { EmptyState } from "@/components/EmptyState";
+import { AdvisorPanel } from "@/components/AdvisorPanel";
 import { BTN_SOLID, CARD, INPUT, LABEL, LINK_QUIET, PILL_HOLD, ROW } from "@/lib/ui";
 
 function greeting() {
@@ -40,7 +42,7 @@ export default async function TodayPage() {
     );
   }
 
-  const netWorthSummary = await getNetWorthSummary();
+  const [netWorthSummary, settings] = await Promise.all([getNetWorthSummary(), getSettings()]);
 
   const {
     window,
@@ -260,6 +262,19 @@ export default async function TodayPage() {
               </div>
             ))}
           </div>
+        )}
+      </section>
+
+      <section>
+        <h2 className="mb-3 font-display text-[22px] font-medium text-ink">Ask Moss</h2>
+        {settings.gemini_key_set ? (
+          <AdvisorPanel />
+        ) : (
+          <EmptyState
+            emoji="🌱"
+            title="Connect a Gemini key to ask Moss questions"
+            hint="Add one in Settings under Connections."
+          />
         )}
       </section>
     </div>

@@ -284,3 +284,148 @@ create policy "net_worth_snapshots_owner" on net_worth_snapshots
 
 create index if not exists net_worth_snapshots_account_idx
   on net_worth_snapshots (account_id, snapshot_date);
+
+-- ============================================================
+-- Vault-backed secrets (build brief §4). The `settings` table only ever
+-- holds boolean flags; the real key text lives in Supabase Vault, written
+-- and read exclusively through these two functions. They run as the
+-- function owner (security definer) but are only grantable to the
+-- service_role — never to anon/authenticated — since vault.secrets isn't
+-- itself scoped by user_id. Server route handlers call them with the
+-- service-role client and always namespace the secret name with the
+-- user's id.
+-- ============================================================
+
+create extension if not exists supabase_vault;
+
+create or replace function public.set_user_secret(secret_name text, secret_value text)
+returns void
+language plpgsql
+security definer
+set search_path = public, vault
+as $$
+declare
+  existing_id uuid;
+begin
+  select id into existing_id from vault.secrets where name = secret_name;
+  if existing_id is not null then
+    perform vault.update_secret(existing_id, secret_value);
+  else
+    perform vault.create_secret(secret_value, secret_name);
+  end if;
+end;
+$$;
+
+create or replace function public.get_user_secret(secret_name text)
+returns text
+language plpgsql
+security definer
+set search_path = public, vault
+as $$
+declare
+  result text;
+begin
+  select decrypted_secret into result from vault.decrypted_secrets where name = secret_name limit 1;
+  return result;
+end;
+$$;
+
+create or replace function public.delete_user_secret(secret_name text)
+returns void
+language plpgsql
+security definer
+set search_path = public, vault
+as $$
+begin
+  delete from vault.secrets where name = secret_name;
+end;
+$$;
+
+revoke execute on function public.set_user_secret(text, text) from public, anon, authenticated;
+revoke execute on function public.get_user_secret(text) from public, anon, authenticated;
+revoke execute on function public.delete_user_secret(text) from public, anon, authenticated;
+grant execute on function public.set_user_secret(text, text) to service_role;
+grant execute on function public.get_user_secret(text) to service_role;
+grant execute on function public.delete_user_secret(text) to service_role;
+
+-- ============================================================
+-- Module 4: cards, point multipliers, the Forbidden-Money sweep.
+-- Not specified in the build brief's schema — designed to fit the existing
+-- shape. Sweeps only ever touch accounts.balance (net worth); they never
+-- touch purchases or the recurring engine, so Safe-to-Spend math is
+-- untouched (brief §0.2).
+-- ============================================================
+
+create table if not exists cards (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users on delete cascade not null,
+  name text not null,
+  last4 text,
+  network text,                          -- visa | mastercard | amex | discover, for the mock art
+  color text default '#1C1A17',          -- mock card art background
+  base_multiplier numeric(4,2) default 1,-- points/cashback per dollar with no category match
+  created_at timestamptz default now()
+);
+
+alter table cards enable row level security;
+drop policy if exists "cards_owner" on cards;
+create policy "cards_owner" on cards
+  for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+create index if not exists cards_user_idx on cards (user_id);
+
+create table if not exists card_category_multipliers (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users on delete cascade not null,
+  card_id uuid references cards on delete cascade not null,
+  category_id uuid references categories on delete cascade not null,
+  multiplier numeric(4,2) not null,
+  created_at timestamptz default now(),
+  unique (card_id, category_id)
+);
+
+alter table card_category_multipliers enable row level security;
+drop policy if exists "card_category_multipliers_owner" on card_category_multipliers;
+create policy "card_category_multipliers_owner" on card_category_multipliers
+  for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+create index if not exists card_multipliers_card_idx on card_category_multipliers (card_id);
+
+-- A credit-card charge, quarantined from Safe-to-Spend until swept.
+create table if not exists card_charges (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users on delete cascade not null,
+  card_id uuid references cards on delete cascade not null,
+  category_id uuid references categories,
+  name text not null,
+  amount numeric(12,2) not null,
+  spent_on date not null,
+  swept boolean default false,
+  swept_at timestamptz,
+  created_at timestamptz default now()
+);
+
+alter table card_charges enable row level security;
+drop policy if exists "card_charges_owner" on card_charges;
+create policy "card_charges_owner" on card_charges
+  for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+create index if not exists card_charges_user_idx on card_charges (user_id, swept);
+
+-- The Forbidden Money bucket is a regular account (usually a Cash App
+-- balance) flagged to receive sweep totals; reconciled_balance is the last
+-- real balance the user confirmed, so short-by-$X = balance - reconciled.
+alter table accounts add column if not exists is_forbidden_money boolean default false;
+alter table accounts add column if not exists reconciled_balance numeric(12,2);
+
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.table_constraints
+    where constraint_name = 'settings_cash_app_card_id_fkey'
+  ) then
+    alter table settings
+      add constraint settings_cash_app_card_id_fkey
+      foreign key (cash_app_card_id) references cards(id) on delete set null;
+  end if;
+end $$;

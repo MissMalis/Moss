@@ -10,6 +10,7 @@ import {
 } from "@/lib/today";
 import { listIncomeSources, listDeductions, listPurchasesInRange, findPostedPayPeriod } from "@/lib/data/income";
 import { listRecurringItems, listOccurrencesInRange, listCategories } from "@/lib/data/recurring";
+import { closeElapsedPeriods } from "@/lib/data/close-periods";
 
 const DEFAULT_CATEGORY_EMOJI = "💳";
 
@@ -37,6 +38,8 @@ export interface TodaySnapshot {
 
 export async function getTodaySnapshot(): Promise<TodaySnapshot> {
   const todayISO = new Date().toISOString().slice(0, 10);
+
+  await closeElapsedPeriods();
 
   const [incomeSources, deductions, recurringItems] = await Promise.all([
     listIncomeSources(),
@@ -96,7 +99,7 @@ export async function getTodaySnapshot(): Promise<TodaySnapshot> {
   const futureWindows = windows.filter((w) => w.payDate > window.payDate).slice(0, 2);
   const scanEnd = futureWindows.at(-1)?.end ?? window.end;
 
-  const [occurrenceRows, purchasesInWindow, purchasesInPrevious, posted, categories] =
+  const [occurrenceRows, purchasesInWindow, purchasesInPrevious, posted, categories, previousClosed] =
     await Promise.all([
       listOccurrencesInRange(scanStart, scanEnd),
       listPurchasesInRange(window.start, window.end),
@@ -105,6 +108,9 @@ export async function getTodaySnapshot(): Promise<TodaySnapshot> {
         : Promise.resolve([]),
       findPostedPayPeriod(primarySource.id, window.payDate),
       listCategories(),
+      previousWindow
+        ? findPostedPayPeriod(primarySource.id, previousWindow.payDate)
+        : Promise.resolve(null),
     ]);
 
   const occurrenceState = new Map(
@@ -121,10 +127,13 @@ export async function getTodaySnapshot(): Promise<TodaySnapshot> {
   const income = netIncomeForWindow(incomeSources, deductions, window, todayISO);
   const purchasesTotal = purchasesInWindow.reduce((s, p) => s + p.amount, 0);
 
-  // Rollover is a live, one-step-back approximation (no auto-reserve term)
-  // until the module-5 period-close job freezes it into a real snapshot.
+  // Rollover prefers the frozen value from a closed previous period (the
+  // period-close job runs above); only falls back to a live, one-step-back
+  // approximation (no auto-reserve term) if that period hasn't closed yet.
   let rollover = 0;
-  if (previousWindow) {
+  if (previousClosed?.closed && previousClosed.safe_to_spend != null) {
+    rollover = Math.max(0, previousClosed.safe_to_spend);
+  } else if (previousWindow) {
     const prevEarmarked = sumEarmarked(
       buildOccurrencesForWindow(recurringItems, occurrenceState, previousWindow.start, previousWindow.end),
     );
