@@ -5,8 +5,9 @@ import { signOut } from "@/lib/actions/auth";
 
 const NAV = [
   { href: "/today", label: "Today" },
-  { href: "/net-worth", label: "Net Worth" },
+  { href: "/net-worth", label: "Net worth" },
   { href: "/recurring", label: "Recurring" },
+  { href: "/income", label: "Income" },
   { href: "/history", label: "History" },
   { href: "/settings", label: "Settings" },
 ];
@@ -20,18 +21,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!user) redirect("/login");
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="border-b border-line bg-panel">
+    <div className="min-h-screen flex flex-col bg-bg">
+      <header className="border-b border-border bg-card">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <span className="font-display text-xl text-text">moss</span>
-          <nav className="flex items-center gap-6 text-sm text-dim">
+          <span className="font-display text-xl font-medium text-ink">moss</span>
+          <nav className="flex items-center gap-6 text-[13.5px] text-ink-2">
             {NAV.map((item) => (
-              <Link key={item.href} href={item.href} className="hover:text-text">
+              <Link key={item.href} href={item.href} className="transition hover:text-ink">
                 {item.label}
               </Link>
             ))}
             <form action={signOut}>
-              <button type="submit" className="hover:text-text">
+              <button type="submit" className="transition hover:text-ink">
                 Sign out
               </button>
             </form>

@@ -14,26 +14,40 @@ async function requireUser() {
 
 function revalidate() {
   revalidatePath("/today");
-  revalidatePath("/settings");
+  revalidatePath("/income");
 }
 
 // ---- Income sources ----
+
+const FREQS = ["biweekly", "semimonthly", "weekly", "monthly", "one-off"] as const;
+type IncomeFreq = (typeof FREQS)[number];
+
+function isIncomeFreq(value: string): value is IncomeFreq {
+  return (FREQS as readonly string[]).includes(value);
+}
 
 export async function createIncomeSource(formData: FormData) {
   const { supabase, user } = await requireUser();
   const name = String(formData.get("name") ?? "").trim();
   const net_per_check = Number(formData.get("net_per_check") ?? 0);
-  const freq = String(formData.get("freq") ?? "biweekly") as "biweekly" | "semimonthly";
+  const freqRaw = String(formData.get("freq") ?? "");
   const anchor_date = String(formData.get("anchor_date") ?? "") || null;
   const sm_day1 = Number(formData.get("sm_day1") ?? 1);
   const sm_day2 = Number(formData.get("sm_day2") ?? 16);
   if (!name) throw new Error("Name is required");
+  if (!isIncomeFreq(freqRaw)) throw new Error("Choose how often this gets paid");
+
+  // biweekly/weekly/one-off reuse anchor_date; monthly reuses sm_day1 as the
+  // day of month; semimonthly uses both sm_day1/sm_day2 — see schema.sql.
+  if ((freqRaw === "biweekly" || freqRaw === "weekly" || freqRaw === "one-off") && !anchor_date) {
+    throw new Error(freqRaw === "one-off" ? "Pick the date it lands" : "Pick an anchor date");
+  }
 
   const { error } = await supabase.from("income_sources").insert({
     user_id: user.id,
     name,
     net_per_check,
-    freq,
+    freq: freqRaw,
     anchor_date,
     sm_day1,
     sm_day2,

@@ -17,6 +17,7 @@ create table if not exists settings (
 );
 
 alter table settings enable row level security;
+drop policy if exists "settings_owner" on settings;
 create policy "settings_owner" on settings
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
@@ -35,6 +36,7 @@ create table if not exists accounts (
 );
 
 alter table accounts enable row level security;
+drop policy if exists "accounts_owner" on accounts;
 create policy "accounts_owner" on accounts
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
@@ -56,6 +58,7 @@ create table if not exists holdings (
 );
 
 alter table holdings enable row level security;
+drop policy if exists "holdings_owner" on holdings;
 create policy "holdings_owner" on holdings
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
@@ -79,6 +82,7 @@ create table if not exists income_sources (
 );
 
 alter table income_sources enable row level security;
+drop policy if exists "income_sources_owner" on income_sources;
 create policy "income_sources_owner" on income_sources
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
@@ -99,6 +103,7 @@ create table if not exists deductions (
 );
 
 alter table deductions enable row level security;
+drop policy if exists "deductions_owner" on deductions;
 create policy "deductions_owner" on deductions
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
@@ -117,6 +122,7 @@ create table if not exists categories (
 );
 
 alter table categories enable row level security;
+drop policy if exists "categories_owner" on categories;
 create policy "categories_owner" on categories
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
@@ -139,6 +145,7 @@ create table if not exists recurring_items (
 );
 
 alter table recurring_items enable row level security;
+drop policy if exists "recurring_items_owner" on recurring_items;
 create policy "recurring_items_owner" on recurring_items
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
@@ -164,6 +171,7 @@ create table if not exists recurring_occurrences (
 );
 
 alter table recurring_occurrences enable row level security;
+drop policy if exists "recurring_occurrences_owner" on recurring_occurrences;
 create policy "recurring_occurrences_owner" on recurring_occurrences
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
@@ -184,6 +192,7 @@ create table if not exists purchases (
 );
 
 alter table purchases enable row level security;
+drop policy if exists "purchases_owner" on purchases;
 create policy "purchases_owner" on purchases
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
@@ -213,6 +222,7 @@ create table if not exists pay_periods (
 );
 
 alter table pay_periods enable row level security;
+drop policy if exists "pay_periods_owner" on pay_periods;
 create policy "pay_periods_owner" on pay_periods
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
@@ -238,3 +248,39 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
+
+-- ============================================================
+-- Design-spec additions (visual + light structural support).
+-- income_sources.freq now also accepts 'weekly' | 'monthly' | 'one-off'.
+-- Existing columns are reused contextually rather than adding new ones:
+--   weekly   -> anchor_date is the weekly anchor (7-day steps)
+--   monthly  -> sm_day1 is the day of month
+--   one-off  -> anchor_date is the single date it lands on
+-- ============================================================
+
+alter table categories add column if not exists emoji text;
+
+alter table accounts add column if not exists starting_contributed numeric(12,2) default 0;
+
+-- Per-account daily snapshot: contributed vs market value, so the net-worth
+-- history graph and per-account sparklines have real time-series data to
+-- draw from. Populated lazily (upserted once per account per day) going
+-- forward from whenever this ships — no fabricated pre-history.
+create table if not exists net_worth_snapshots (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users on delete cascade not null,
+  account_id uuid references accounts on delete cascade not null,
+  snapshot_date date not null,
+  contributed numeric(12,2) not null,
+  market_value numeric(12,2) not null,
+  created_at timestamptz default now(),
+  unique (account_id, snapshot_date)
+);
+
+alter table net_worth_snapshots enable row level security;
+drop policy if exists "net_worth_snapshots_owner" on net_worth_snapshots;
+create policy "net_worth_snapshots_owner" on net_worth_snapshots
+  for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+create index if not exists net_worth_snapshots_account_idx
+  on net_worth_snapshots (account_id, snapshot_date);

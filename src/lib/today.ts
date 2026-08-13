@@ -1,4 +1,4 @@
-import { periodsForMonth, type Freq, type PayWindow } from "@/lib/periods";
+import { periodsForMonth, type Freq, type IncomeForPeriods, type PayWindow } from "@/lib/periods";
 import {
   buildOccurrencesForWindow,
   sumEarmarked,
@@ -24,11 +24,16 @@ export interface DeductionLike {
 }
 
 function windowsAround(source: IncomeSourceLike, todayISO: string): PayWindow[] {
+  // One-off income isn't periodic — it's a single dated event handled in
+  // netIncomeForWindow directly, never as the window-driving primary source.
+  if (source.freq === "one-off") return [];
+
   const today = new Date(todayISO + "T00:00:00");
-  const inc = {
+  const inc: IncomeForPeriods = {
     freq: source.freq,
-    smDays: [source.sm_day1, source.sm_day2] as [number, number],
+    smDays: [source.sm_day1, source.sm_day2],
     anchor: source.anchor_date ?? undefined,
+    monthlyDay: source.sm_day1,
   };
   const out: PayWindow[] = [];
   // Scan a window of months wide enough to always have >= 2 windows past
@@ -71,6 +76,15 @@ export function netIncomeForWindow(
   let total = 0;
   for (const source of sources) {
     const dedTotal = deductionsTotalForSource(deductions, source.id);
+
+    if (source.freq === "one-off") {
+      const date = source.anchor_date;
+      if (date && date >= window.start && date <= window.end) {
+        total += source.net_per_check - dedTotal;
+      }
+      continue;
+    }
+
     for (const w of windowsAround(source, todayISO)) {
       if (w.payDate >= window.start && w.payDate <= window.end) {
         total += source.net_per_check - dedTotal;

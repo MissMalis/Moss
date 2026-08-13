@@ -22,6 +22,28 @@ describe("periodsForMonth", () => {
     );
     expect(p2.end).toBe("2026-04-30");
   });
+
+  it("weekly: 7-day windows walking from the anchor", () => {
+    const windows = periodsForMonth({ freq: "weekly", anchor: "2026-01-02" }, 2026, 0);
+    expect(windows[0]).toEqual({ payDate: "2026-01-02", start: "2026-01-02", end: "2026-01-08" });
+    expect(windows[1]).toEqual({ payDate: "2026-01-09", start: "2026-01-09", end: "2026-01-15" });
+  });
+
+  it("monthly: one window per month, ending the day before next month's occurrence", () => {
+    const [w] = periodsForMonth({ freq: "monthly", monthlyDay: 15 }, 2026, 0);
+    expect(w).toEqual({ payDate: "2026-01-15", start: "2026-01-15", end: "2026-02-14" });
+  });
+
+  it("monthly: clamps the day for short months", () => {
+    // Feb 2026 has 28 days; day 31 clamps to the 28th.
+    const [w] = periodsForMonth({ freq: "monthly", monthlyDay: 31 }, 2026, 1);
+    expect(w.payDate).toBe("2026-02-28");
+  });
+
+  it("one-off: produces no periodic windows", () => {
+    const windows = periodsForMonth({ freq: "one-off", anchor: "2026-01-10" }, 2026, 0);
+    expect(windows).toEqual([]);
+  });
 });
 
 describe("occurrenceInWindow", () => {

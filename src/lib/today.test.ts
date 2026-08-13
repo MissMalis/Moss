@@ -44,6 +44,38 @@ describe("netIncomeForWindow", () => {
     const income = netIncomeForWindow([biweekly], deductions, current, "2026-01-10");
     expect(income).toBe(2000 - 150);
   });
+
+  it("adds a one-off deposit only to the window it lands in", () => {
+    const windows = windowsAround(biweekly, "2026-01-10");
+    const current = findCurrentWindow(windows, "2026-01-10")!;
+    const oneOff = {
+      id: "src2",
+      net_per_check: 300,
+      freq: "one-off" as const,
+      anchor_date: current.start, // lands inside the current window
+      sm_day1: 1,
+      sm_day2: 16,
+    };
+
+    const inCurrent = netIncomeForWindow([biweekly, oneOff], [], current, "2026-01-10");
+    expect(inCurrent).toBe(2000 + 300);
+
+    const future = findFutureWindows(windows, current, 1)[0];
+    const inFuture = netIncomeForWindow([biweekly, oneOff], [], future, "2026-01-10");
+    expect(inFuture).toBe(2000); // one-off doesn't repeat
+  });
+
+  it("produces no window at all for a one-off source (it can't drive a schedule)", () => {
+    const oneOff = {
+      id: "src2",
+      net_per_check: 300,
+      freq: "one-off" as const,
+      anchor_date: "2026-01-10",
+      sm_day1: 1,
+      sm_day2: 16,
+    };
+    expect(windowsAround(oneOff, "2026-01-10")).toEqual([]);
+  });
 });
 
 describe("computeAutoReserve", () => {

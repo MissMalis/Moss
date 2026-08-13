@@ -61,3 +61,43 @@ export function computeNetWorth(
 
   return { total, byType, accounts: accountValues };
 }
+
+const ACCOUNT_EMOJI: Record<string, string> = {
+  Cash: "💵",
+  HSA: "🏥",
+  "Roth IRA": "🌱",
+  "Traditional IRA": "🏛️",
+  "Taxable Brokerage": "📈",
+  Liabilities: "💳",
+};
+
+export function accountEmoji(type: string): string {
+  return ACCOUNT_EMOJI[type] ?? "💰";
+}
+
+export interface SnapshotPoint {
+  snapshot_date: string;
+  account_id: string;
+  contributed: number;
+  market_value: number;
+}
+
+export interface HistoryPoint {
+  date: string;
+  contributed: number;
+  marketValue: number;
+}
+
+/** Sums per-account snapshots into one portfolio-wide series, by date. */
+export function aggregateSnapshots(snapshots: SnapshotPoint[]): HistoryPoint[] {
+  const byDate = new Map<string, { contributed: number; marketValue: number }>();
+  for (const s of snapshots) {
+    const entry = byDate.get(s.snapshot_date) ?? { contributed: 0, marketValue: 0 };
+    entry.contributed += s.contributed;
+    entry.marketValue += s.market_value;
+    byDate.set(s.snapshot_date, entry);
+  }
+  return Array.from(byDate.entries())
+    .map(([date, v]) => ({ date, contributed: v.contributed, marketValue: v.marketValue }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}

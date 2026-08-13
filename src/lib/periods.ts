@@ -3,12 +3,13 @@
 // the assertions in the brief §6 (semimonthly month-end clamp, rent/Netflix
 // window filing, variable true-up, auto-reserve, double-count guard).
 
-export type Freq = "biweekly" | "semimonthly";
+export type Freq = "biweekly" | "semimonthly" | "weekly" | "monthly" | "one-off";
 
 export interface IncomeForPeriods {
   freq: Freq;
-  smDays?: [number, number]; // e.g. [1, 16]
-  anchor?: string; // biweekly anchor payday, ISO date
+  smDays?: [number, number]; // e.g. [1, 16], semimonthly only
+  anchor?: string; // biweekly/weekly anchor date, or the one-off's date, ISO
+  monthlyDay?: number; // monthly only
 }
 
 export interface PayWindow {
@@ -18,6 +19,7 @@ export interface PayWindow {
 }
 
 // Pay periods for a given month. freq: "biweekly" | "semimonthly"
+// (Original two branches are the validated brief §1 logic — untouched.)
 export function periodsForMonth(
   inc: IncomeForPeriods,
   year: number,
@@ -30,7 +32,7 @@ export function periodsForMonth(
     out.push({ payDate: mk(d1), start: mk(d1), end: mk(d2 - 1) });
     const eom = new Date(year, month + 1, 0).getDate();
     out.push({ payDate: mk(d2), start: mk(d2), end: mk(eom) });
-  } else {
+  } else if (inc.freq === "biweekly") {
     // biweekly: walk 14-day steps from a known anchor payday
     const d = new Date(inc.anchor + "T00:00:00");
     const ms = new Date(year, month, 1),
@@ -48,7 +50,40 @@ export function periodsForMonth(
         });
       d.setDate(d.getDate() + 14);
     }
+  } else if (inc.freq === "weekly") {
+    // weekly: same walk as biweekly, 7-day steps
+    const d = new Date(inc.anchor + "T00:00:00");
+    const ms = new Date(year, month, 1),
+      me = new Date(year, month + 1, 0);
+    while (d > ms) d.setDate(d.getDate() - 7);
+    while (d <= me) {
+      const pay = new Date(d),
+        end = new Date(d);
+      end.setDate(end.getDate() + 6);
+      if (pay.getMonth() === month)
+        out.push({
+          payDate: pay.toISOString().slice(0, 10),
+          start: pay.toISOString().slice(0, 10),
+          end: end.toISOString().slice(0, 10),
+        });
+      d.setDate(d.getDate() + 7);
+    }
+  } else if (inc.freq === "monthly") {
+    // monthly: one window, from this month's day to the day before next month's.
+    const mk = (y: number, m: number, day: number) =>
+      new Date(y, m, Math.min(day, new Date(y, m + 1, 0).getDate()));
+    const pay = mk(year, month, inc.monthlyDay!);
+    const nextPay = mk(year, month + 1, inc.monthlyDay!);
+    const end = new Date(nextPay);
+    end.setDate(end.getDate() - 1);
+    out.push({
+      payDate: pay.toISOString().slice(0, 10),
+      start: pay.toISOString().slice(0, 10),
+      end: end.toISOString().slice(0, 10),
+    });
   }
+  // "one-off" isn't periodic — it's a single dated event handled separately
+  // wherever income windows are consumed (see today.ts).
   return out;
 }
 

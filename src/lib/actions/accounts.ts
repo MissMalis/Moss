@@ -24,14 +24,21 @@ export async function createAccount(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const type = String(formData.get("type") ?? "");
   const balance = Number(formData.get("balance") ?? 0);
+  const starting_contributed = Number(formData.get("starting_contributed") ?? 0);
   const is_system = formData.get("is_system") === "on";
   const system_key = String(formData.get("system_key") ?? "").trim() || null;
   if (!name || !type) throw new Error("Name and type are required");
   if (!isAccountType(type)) throw new Error("Invalid account type");
 
-  const { error } = await supabase
-    .from("accounts")
-    .insert({ user_id: user.id, name, type, balance, is_system, system_key });
+  const { error } = await supabase.from("accounts").insert({
+    user_id: user.id,
+    name,
+    type,
+    balance,
+    starting_contributed,
+    is_system,
+    system_key,
+  });
   if (error) throw error;
   revalidatePath("/net-worth");
 }
@@ -43,6 +50,20 @@ export async function updateAccountBalance(formData: FormData) {
   if (!id) throw new Error("Missing account id");
 
   const { error } = await supabase.from("accounts").update({ balance }).eq("id", id);
+  if (error) throw error;
+  revalidatePath("/net-worth");
+}
+
+export async function updateStartingContributed(formData: FormData) {
+  const { supabase } = await requireUser();
+  const id = String(formData.get("id") ?? "");
+  const starting_contributed = Number(formData.get("starting_contributed") ?? 0);
+  if (!id) throw new Error("Missing account id");
+
+  const { error } = await supabase
+    .from("accounts")
+    .update({ starting_contributed })
+    .eq("id", id);
   if (error) throw error;
   revalidatePath("/net-worth");
 }

@@ -24,9 +24,10 @@ function revalidate() {
 export async function createCategory(formData: FormData) {
   const { supabase, user } = await requireUser();
   const name = String(formData.get("name") ?? "").trim();
+  const emoji = String(formData.get("emoji") ?? "").trim() || null;
   if (!name) throw new Error("Name is required");
 
-  const { error } = await supabase.from("categories").insert({ user_id: user.id, name });
+  const { error } = await supabase.from("categories").insert({ user_id: user.id, name, emoji });
   if (error) throw error;
   revalidate();
 }

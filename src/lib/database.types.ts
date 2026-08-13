@@ -42,6 +42,7 @@ export interface Database {
         balance: number;
         is_system: boolean;
         system_key: string | null;
+        starting_contributed: number;
         created_at: string;
       }>;
       holdings: Row<{
@@ -60,7 +61,7 @@ export interface Database {
         user_id: string;
         name: string;
         net_per_check: number;
-        freq: "biweekly" | "semimonthly";
+        freq: "biweekly" | "semimonthly" | "weekly" | "monthly" | "one-off";
         anchor_date: string | null;
         sm_day1: number;
         sm_day2: number;
@@ -81,6 +82,7 @@ export interface Database {
         id: string;
         user_id: string;
         name: string;
+        emoji: string | null;
         sort_order: number;
         created_at: string;
       }>;
@@ -131,6 +133,15 @@ export interface Database {
         safe_to_spend: number | null;
         closed: boolean;
         snapshot: Json | null;
+        created_at: string;
+      }>;
+      net_worth_snapshots: Row<{
+        id: string;
+        user_id: string;
+        account_id: string;
+        snapshot_date: string;
+        contributed: number;
+        market_value: number;
         created_at: string;
       }>;
     };

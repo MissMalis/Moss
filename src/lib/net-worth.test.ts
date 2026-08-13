@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeNetWorth } from "./net-worth";
+import { aggregateSnapshots, computeNetWorth } from "./net-worth";
 
 describe("computeNetWorth", () => {
   it("uses holdings market value instead of the stored balance when holdings exist", () => {
@@ -28,5 +28,19 @@ describe("computeNetWorth", () => {
     );
     expect(result.total).toBe(1700);
     expect(result.byType["Liabilities"]).toBe(-800);
+  });
+});
+
+describe("aggregateSnapshots", () => {
+  it("sums across accounts by date and sorts chronologically", () => {
+    const result = aggregateSnapshots([
+      { snapshot_date: "2026-02-01", account_id: "a1", contributed: 100, market_value: 120 },
+      { snapshot_date: "2026-01-01", account_id: "a1", contributed: 90, market_value: 100 },
+      { snapshot_date: "2026-01-01", account_id: "a2", contributed: 10, market_value: 15 },
+    ]);
+    expect(result).toEqual([
+      { date: "2026-01-01", contributed: 100, marketValue: 115 },
+      { date: "2026-02-01", contributed: 100, marketValue: 120 },
+    ]);
   });
 });

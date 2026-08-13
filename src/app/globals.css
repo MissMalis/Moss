@@ -1,37 +1,41 @@
 @import "tailwindcss";
 
 :root {
-  --color-bg: #1a1614;
-  --color-panel: #221d1a;
-  --color-panel2: #2a2320;
-  --color-line: #3a302b;
+  --color-bg: #faf9f6;
+  --color-card: #ffffff;
+  --color-card-soft: #f4f2ec;
+  --color-border: #eae7df;
+  --color-border-strong: #d8d4c9;
 
-  --color-text: #ede6dd;
-  --color-dim: #a99c90;
-  --color-faint: #6e645b;
+  --color-ink: #1c1a17;
+  --color-ink-2: #6b6459;
+  --color-ink-3: #a7a093;
 
-  --color-blood: #7b2d26;
-  --color-blood-light: #a5453b;
-  --color-gold: #c9a961;
-  --color-sage: #7a8b6f;
-  --color-warn: #c77b4a;
+  --color-good: #3e9e6b;
+  --color-bad: #c4553f;
+  --color-hold: #b98a3e;
+  --color-hold-bg: #f7efdf;
+
+  /* Growth-graph specific: pale-blue "contributed" line + fill. */
+  --color-contributed: #8fb8e0;
 }
 
 @theme inline {
   --color-bg: var(--color-bg);
-  --color-panel: var(--color-panel);
-  --color-panel2: var(--color-panel2);
-  --color-line: var(--color-line);
+  --color-card: var(--color-card);
+  --color-card-soft: var(--color-card-soft);
+  --color-border: var(--color-border);
+  --color-border-strong: var(--color-border-strong);
 
-  --color-text: var(--color-text);
-  --color-dim: var(--color-dim);
-  --color-faint: var(--color-faint);
+  --color-ink: var(--color-ink);
+  --color-ink-2: var(--color-ink-2);
+  --color-ink-3: var(--color-ink-3);
 
-  --color-blood: var(--color-blood);
-  --color-blood-light: var(--color-blood-light);
-  --color-gold: var(--color-gold);
-  --color-sage: var(--color-sage);
-  --color-warn: var(--color-warn);
+  --color-good: var(--color-good);
+  --color-bad: var(--color-bad);
+  --color-hold: var(--color-hold);
+  --color-hold-bg: var(--color-hold-bg);
+  --color-contributed: var(--color-contributed);
 
   --font-display: var(--font-fraunces);
   --font-sans: var(--font-inter);
@@ -39,10 +43,15 @@
 
 body {
   background: var(--color-bg);
-  color: var(--color-text);
+  color: var(--color-ink);
   font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
 * {
-  border-color: var(--color-line);
+  border-color: var(--color-border);
+}
+
+::selection {
+  background: var(--color-ink);
+  color: var(--color-bg);
 }
