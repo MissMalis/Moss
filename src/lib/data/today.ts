@@ -39,13 +39,13 @@ export interface TodaySnapshot {
 export async function getTodaySnapshot(): Promise<TodaySnapshot> {
   const todayISO = new Date().toISOString().slice(0, 10);
 
-  await closeElapsedPeriods();
-
   const [incomeSources, deductions, recurringItems] = await Promise.all([
     listIncomeSources(),
     listDeductions(),
     listRecurringItems(),
   ]);
+
+  await closeElapsedPeriods({ incomeSources, deductions, recurringItems });
 
   // The window-driving source has to have an actual cadence — a one-off
   // deposit can land inside a window but can't define one.
@@ -125,7 +125,14 @@ export async function getTodaySnapshot(): Promise<TodaySnapshot> {
   );
   const earmarked = sumEarmarked(earmarkedItems);
   const income = netIncomeForWindow(incomeSources, deductions, window, todayISO);
-  const purchasesTotal = purchasesInWindow.reduce((s, p) => s + p.amount, 0);
+  // Only checking-sourced spending draws down Safe-to-Spend (brief rev 02 §3)
+  // — investing/stored-value spends come out of that account's own balance
+  // and never touch this number. Loading a stored-value account IS a
+  // checking-sourced "purchase" (that's the one Safe-to-Spend hit), so it's
+  // naturally included here without special-casing.
+  const purchasesTotal = purchasesInWindow
+    .filter((p) => p.payment_source === "checking")
+    .reduce((s, p) => s + p.amount, 0);
 
   // Rollover prefers the frozen value from a closed previous period (the
   // period-close job runs above); only falls back to a live, one-step-back
@@ -138,7 +145,9 @@ export async function getTodaySnapshot(): Promise<TodaySnapshot> {
       buildOccurrencesForWindow(recurringItems, occurrenceState, previousWindow.start, previousWindow.end),
     );
     const prevIncome = netIncomeForWindow(incomeSources, deductions, previousWindow, todayISO);
-    const prevPurchasesTotal = purchasesInPrevious.reduce((s, p) => s + p.amount, 0);
+    const prevPurchasesTotal = purchasesInPrevious
+      .filter((p) => p.payment_source === "checking")
+      .reduce((s, p) => s + p.amount, 0);
     const prevSTS = safeToSpend({
       income: prevIncome,
       rollover: 0,

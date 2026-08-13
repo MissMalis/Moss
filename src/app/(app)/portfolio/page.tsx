@@ -8,22 +8,30 @@ import {
   updateStartingContributed,
 } from "@/lib/actions/accounts";
 import { createHolding, deleteHolding, updateHoldingPrice } from "@/lib/actions/holdings";
+import { listCards, listCardMultipliers } from "@/lib/data/cards";
+import { listCategories } from "@/lib/data/recurring";
+import { getSettings } from "@/lib/data/settings";
+import { createCard, deleteCard, createMultiplier, deleteMultiplier, setCashAppCard } from "@/lib/actions/cards";
 import { formatMoney, formatShortDateLabel } from "@/lib/format";
 import { Money } from "@/components/Money";
+import { MockCard } from "@/components/MockCard";
 import { NetWorthLines } from "@/components/NetWorthLines";
 import { EmptyState } from "@/components/EmptyState";
 import { RefreshPricesButton } from "@/components/RefreshPricesButton";
-import { BTN_DASHED, BTN_SOLID, INPUT, LABEL, LINK_QUIET, ROW } from "@/lib/ui";
+import { Tooltip } from "@/components/Tooltip";
+import { BTN_DASHED, BTN_GHOST, BTN_SOLID, INPUT, LABEL, LINK_QUIET, ROW } from "@/lib/ui";
 
-const NO_MARKET_TYPES = new Set(["Cash", "Liabilities"]);
+const NO_MARKET_TYPES = new Set(["Cash", "Liabilities", "Stored-value"]);
 
-export default async function NetWorthPage() {
-  await ensureSnapshotsForToday();
-
-  const [accounts, holdings, snapshots] = await Promise.all([
-    listAccounts(),
-    listHoldings(),
+export default async function PortfolioPage() {
+  const [accounts, holdings] = await Promise.all([listAccounts(), listHoldings()]);
+  await ensureSnapshotsForToday({ accounts, holdings });
+  const [snapshots, cards, multipliers, categories, settings] = await Promise.all([
     listAllSnapshots(),
+    listCards(),
+    listCardMultipliers(),
+    listCategories(),
+    getSettings(),
   ]);
 
   const netWorth = computeNetWorth(accounts, holdings);
@@ -54,9 +62,11 @@ export default async function NetWorthPage() {
   const investmentAccounts = accounts.filter((a) =>
     ["Roth IRA", "Traditional IRA", "Taxable Brokerage", "HSA"].includes(a.type),
   );
+  const categoryById = new Map(categories.map((c) => [c.id, c]));
+  const channelingCard = cards.find((c) => c.id === settings.cash_app_card_id) ?? null;
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-8">
       <section>
         <p className="text-[12.5px] uppercase tracking-wide text-ink-3">Net worth</p>
         <Money value={netWorth.total} size="section" />
@@ -114,7 +124,11 @@ export default async function NetWorthPage() {
                     <div className="flex items-center gap-4">
                       <div className="text-right">
                         <Money value={value} size="card" />
-                        {NO_MARKET_TYPES.has(a.type) ? (
+                        {a.type === "HYSA" && a.apy_pct ? (
+                          <p className="text-[11.5px] text-ink-3">
+                            {a.apy_pct}% APY · ~{formatMoney((a.balance ?? 0) * (a.apy_pct / 100))}/yr
+                          </p>
+                        ) : NO_MARKET_TYPES.has(a.type) ? (
                           <p className="text-[11.5px] text-ink-3">no market movement</p>
                         ) : latest ? (
                           <p className={`text-[11.5px] ${growth >= 0 ? "text-good" : "text-bad"}`}>
@@ -126,21 +140,20 @@ export default async function NetWorthPage() {
                       {trackable && series.length > 1 && <NetWorthLines points={series} variant="spark" />}
 
                       <div className="flex flex-col items-end gap-1">
-                        {!valuedByHoldings && (
-                          <form action={updateAccountBalance} className="flex items-center gap-1.5">
-                            <input type="hidden" name="id" value={a.id} />
-                            <input
-                              type="number"
-                              step="0.01"
-                              name="balance"
-                              defaultValue={a.balance ?? 0}
-                              className={`w-24 py-1 text-right text-[12.5px] ${INPUT}`}
-                            />
-                            <button type="submit" className={LINK_QUIET}>
-                              Save
-                            </button>
-                          </form>
-                        )}
+                        <form action={updateAccountBalance} className="flex items-center gap-1.5">
+                          <input type="hidden" name="id" value={a.id} />
+                          <span className="text-[11px] text-ink-3">{valuedByHoldings ? "Cash" : "Balance"}</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            name="balance"
+                            defaultValue={a.balance ?? 0}
+                            className={`w-24 py-1 text-right text-[12.5px] ${INPUT}`}
+                          />
+                          <button type="submit" className={LINK_QUIET}>
+                            Save
+                          </button>
+                        </form>
                         <form action={deleteAccount}>
                           <input type="hidden" name="id" value={a.id} />
                           <button type="submit" className={LINK_QUIET}>
@@ -150,6 +163,13 @@ export default async function NetWorthPage() {
                       </div>
                     </div>
                   </div>
+
+                  {a.annual_contribution_limit && latest && (
+                    <p className="mt-2 text-[12px] text-ink-3">
+                      {formatMoney(Math.max(0, a.annual_contribution_limit - latest.contributed))} from
+                      your {formatMoney(a.annual_contribution_limit)} limit
+                    </p>
+                  )}
 
                   {trackable && (
                     <details className="mt-3">
@@ -242,7 +262,7 @@ export default async function NetWorthPage() {
           </div>
         )}
 
-        <details className="mt-4 rounded-[20px] border border-border bg-card p-5">
+        <details className="mt-4 rounded-xl border border-border bg-card p-5">
           <summary className="cursor-pointer text-[13px] text-ink-2">Add account</summary>
           <form action={createAccount} className="mt-3 flex flex-wrap items-end gap-3">
             <label className={LABEL}>
@@ -274,8 +294,18 @@ export default async function NetWorthPage() {
               />
             </label>
             <label className={LABEL}>
-              System key
-              <input name="system_key" placeholder="hsa, t401k…" className={`w-28 ${INPUT}`} />
+              <span className="flex items-center gap-1">
+                APY %
+                <Tooltip text="For a high-yield savings account — used to show accrued interest. Leave blank for anything else." />
+              </span>
+              <input type="number" step="0.01" name="apy_pct" className={`w-20 ${INPUT}`} />
+            </label>
+            <label className={LABEL}>
+              <span className="flex items-center gap-1">
+                Annual limit
+                <Tooltip text="Optional — for 401k/HSA/IRA accounts, Moss will show how close you are to it as the year goes." />
+              </span>
+              <input type="number" step="0.01" name="annual_contribution_limit" className={`w-28 ${INPUT}`} />
             </label>
             <label className="flex items-center gap-1.5 pb-2 text-[12.5px] text-ink-2">
               <input type="checkbox" name="is_system" />
@@ -290,7 +320,7 @@ export default async function NetWorthPage() {
 
       {investmentAccounts.length > 0 && (
         <section>
-          <details className="rounded-[20px] border border-dashed border-border-strong bg-card-soft p-5">
+          <details className="rounded-xl border border-dashed border-border-strong bg-card-soft p-5">
             <summary className={`cursor-pointer ${BTN_DASHED} inline-block border-0 p-0 hover:border-0`}>
               + Add position
             </summary>
@@ -344,6 +374,161 @@ export default async function NetWorthPage() {
           </details>
         </section>
       )}
+
+      <section className="flex flex-wrap items-start gap-6">
+        {channelingCard ? (
+          <MockCard
+            name={channelingCard.name}
+            last4={channelingCard.last4}
+            network={channelingCard.network}
+            color={channelingCard.color}
+          />
+        ) : (
+          <div className="flex h-[150px] w-[240px] items-center justify-center rounded-lg border border-dashed border-border-strong text-[12.5px] text-ink-3">
+            No channeling card set
+          </div>
+        )}
+        <div className="flex-1 min-w-[220px]">
+          <p className="text-[13px] text-ink-2">
+            Which card channels rewards charges into your buffer?
+            <Tooltip text="Just for the visual above and for Sweep — pick whichever card you use for quarantined rewards spending." />
+          </p>
+          <form action={setCashAppCard} className="mt-2 flex items-center gap-2">
+            <select
+              name="cash_app_card_id"
+              defaultValue={settings.cash_app_card_id ?? ""}
+              className={INPUT}
+            >
+              <option value="">None</option>
+              {cards.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <button type="submit" className={BTN_GHOST}>
+              Save
+            </button>
+          </form>
+        </div>
+      </section>
+
+      <section>
+        <h2 className="mb-3 font-display text-[22px] font-medium text-ink">Cards</h2>
+        {cards.length === 0 ? (
+          <EmptyState emoji="💳" title="No cards yet" hint="Add your first one below." />
+        ) : (
+          <div className="space-y-2">
+            {cards.map((c) => {
+              const cardMultipliers = multipliers.filter((m) => m.card_id === c.id);
+              return (
+                <div key={c.id} className={ROW}>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[14px] text-ink">{c.name}</p>
+                      <p className="text-[12px] text-ink-3">
+                        {c.network ?? "card"} · base {c.base_multiplier}x
+                      </p>
+                    </div>
+                    <form action={deleteCard}>
+                      <input type="hidden" name="id" value={c.id} />
+                      <button type="submit" className={LINK_QUIET}>
+                        Remove
+                      </button>
+                    </form>
+                  </div>
+
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-[12.5px] text-ink-3 hover:text-ink-2">
+                      {cardMultipliers.length} category bonus{cardMultipliers.length === 1 ? "" : "es"}
+                    </summary>
+                    <div className="mt-2 space-y-1">
+                      {cardMultipliers.map((m) => (
+                        <div key={m.id} className="flex items-center justify-between text-[13px]">
+                          <span className="text-ink-2">
+                            {categoryById.get(m.category_id)?.emoji}{" "}
+                            {categoryById.get(m.category_id)?.name ?? "—"}
+                          </span>
+                          <span className="flex items-center gap-2">
+                            <span className="text-ink">{m.multiplier}x</span>
+                            <form action={deleteMultiplier}>
+                              <input type="hidden" name="id" value={m.id} />
+                              <button type="submit" className={LINK_QUIET}>
+                                Remove
+                              </button>
+                            </form>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    {categories.length === 0 ? (
+                      <p className="mt-2 text-[12px] text-ink-3">
+                        Add a category in Expenses first, then come back to set a bonus.
+                      </p>
+                    ) : (
+                      <form action={createMultiplier} className="mt-2 flex items-end gap-2">
+                        <input type="hidden" name="card_id" value={c.id} />
+                        <select name="category_id" required className={`py-1 text-[12.5px] ${INPUT}`}>
+                          {categories.map((cat) => (
+                            <option key={cat.id} value={cat.id}>
+                              {cat.emoji} {cat.name}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          type="number"
+                          step="0.5"
+                          name="multiplier"
+                          defaultValue={2}
+                          required
+                          className={`w-16 py-1 text-[12.5px] ${INPUT}`}
+                        />
+                        <button type="submit" className={LINK_QUIET}>
+                          Add bonus
+                        </button>
+                      </form>
+                    )}
+                  </details>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <details className="mt-4 rounded-xl border border-border bg-card p-5">
+          <summary className="cursor-pointer text-[13px] text-ink-2">Add a card</summary>
+          <form action={createCard} className="mt-3 flex flex-wrap items-end gap-3">
+            <label className={LABEL}>
+              Name
+              <input name="name" required placeholder="Chase Sapphire" className={INPUT} />
+            </label>
+            <label className={LABEL}>
+              Last 4
+              <input name="last4" maxLength={4} className={`w-20 ${INPUT}`} />
+            </label>
+            <label className={LABEL}>
+              Network
+              <select name="network" className={INPUT}>
+                <option value="visa">Visa</option>
+                <option value="mastercard">Mastercard</option>
+                <option value="amex">Amex</option>
+                <option value="discover">Discover</option>
+              </select>
+            </label>
+            <label className={LABEL}>
+              Base multiplier
+              <input type="number" step="0.5" name="base_multiplier" defaultValue={1} className={`w-20 ${INPUT}`} />
+            </label>
+            <label className={LABEL}>
+              Card color
+              <input type="color" name="color" defaultValue="#14181C" className="h-9 w-14 rounded-lg border border-border" />
+            </label>
+            <button type="submit" className={BTN_SOLID}>
+              Add card
+            </button>
+          </form>
+        </details>
+      </section>
     </div>
   );
 }

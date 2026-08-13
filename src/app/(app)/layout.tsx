@@ -2,13 +2,15 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/lib/actions/auth";
+import { getSettings } from "@/lib/data/settings";
+import { FloatingAskMoss } from "@/components/FloatingAskMoss";
 
 const NAV = [
   { href: "/today", label: "Today" },
-  { href: "/net-worth", label: "Net worth" },
-  { href: "/recurring", label: "Recurring" },
+  { href: "/expenses", label: "Expenses" },
   { href: "/income", label: "Income" },
-  { href: "/cards", label: "Cards" },
+  { href: "/portfolio", label: "Portfolio" },
+  { href: "/sweep", label: "Sweep" },
   { href: "/history", label: "History" },
   { href: "/settings", label: "Settings" },
 ];
@@ -20,6 +22,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   } = await supabase.auth.getUser();
 
   if (!user) redirect("/login");
+
+  const settings = await getSettings();
 
   return (
     <div className="min-h-screen flex flex-col bg-bg">
@@ -41,6 +45,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       </header>
       <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8">{children}</main>
+      <FloatingAskMoss geminiConnected={settings.gemini_key_set} />
     </div>
   );
 }

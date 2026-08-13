@@ -11,7 +11,7 @@ export function MockCard({
 }) {
   return (
     <div
-      className="flex h-[150px] w-[240px] flex-col justify-between rounded-2xl p-5 text-bg shadow-none"
+      className="flex h-[150px] w-[240px] flex-col justify-between rounded-lg p-5 text-bg shadow-none"
       style={{ background: color ?? "#1C1A17" }}
     >
       <div className="flex items-start justify-between">

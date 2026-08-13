@@ -6,8 +6,10 @@ import { getNetWorthSummary } from "@/lib/data/net-worth-summary";
 import { listUnsweptCharges } from "@/lib/data/cards";
 import { formatMoney } from "@/lib/format";
 
-// Bump this if Google retires the model — keep it to one place.
-const GEMINI_MODEL = "gemini-2.5-flash";
+// Alias, not a pinned version — tracks Google's current Flash model instead
+// of 404ing the moment a specific version gets retired. If you'd rather pin
+// a specific version, swap this one constant for e.g. "gemini-3.6-flash".
+const GEMINI_MODEL = "gemini-flash-latest";
 
 function buildContext(
   today: Awaited<ReturnType<typeof getTodaySnapshot>>,
@@ -92,6 +94,12 @@ Question: ${question}`;
   );
 
   if (!res.ok) {
+    if (res.status === 404) {
+      return NextResponse.json(
+        { error: "The advisor model needs updating — ping whoever maintains this app." },
+        { status: 502 },
+      );
+    }
     const detail = await res.text().catch(() => "");
     return NextResponse.json(
       { error: `Gemini request failed (${res.status}). ${detail.slice(0, 200)}` },

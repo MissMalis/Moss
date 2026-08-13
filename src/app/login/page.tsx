@@ -26,7 +26,7 @@ export default function LoginPage() {
         <p className="text-ink-2 text-[14px] mb-8">Private finance, one login.</p>
 
         {magicLinkState.sent ? (
-          <p className="rounded-2xl border border-border bg-card-soft px-4 py-3 text-[14px] text-good">
+          <p className="rounded-lg border border-border bg-card-soft px-4 py-3 text-[14px] text-good">
             Check your email for a sign-in link.
           </p>
         ) : (

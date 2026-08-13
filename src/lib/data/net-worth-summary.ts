@@ -10,13 +10,9 @@ export interface NetWorthSummary {
 
 /** Lightweight net-worth summary for the Today screen (total, % growth, history for the graph). */
 export async function getNetWorthSummary(): Promise<NetWorthSummary> {
-  await ensureSnapshotsForToday();
-
-  const [accounts, holdings, snapshots] = await Promise.all([
-    listAccounts(),
-    listHoldings(),
-    listAllSnapshots(),
-  ]);
+  const [accounts, holdings] = await Promise.all([listAccounts(), listHoldings()]);
+  await ensureSnapshotsForToday({ accounts, holdings });
+  const snapshots = await listAllSnapshots();
 
   const netWorth = computeNetWorth(accounts, holdings);
   const history = aggregateSnapshots(snapshots);

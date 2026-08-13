@@ -1,20 +1,22 @@
 @import "tailwindcss";
 
 :root {
-  --color-bg: #faf9f6;
+  /* Cool, near-neutral grey-blue — never cream/beige. If it looks warm, it's wrong. */
+  --color-bg: #f7f8f9;
   --color-card: #ffffff;
-  --color-card-soft: #f4f2ec;
-  --color-border: #eae7df;
-  --color-border-strong: #d8d4c9;
+  --color-card-soft: #f0f2f4;
+  --color-border: #e3e6ea;
+  --color-border-strong: #cdd2d8;
 
-  --color-ink: #1c1a17;
-  --color-ink-2: #6b6459;
-  --color-ink-3: #a7a093;
+  --color-ink: #14181c;
+  --color-ink-2: #5a626b;
+  --color-ink-3: #9aa2ab;
 
-  --color-good: #3e9e6b;
-  --color-bad: #c4553f;
-  --color-hold: #b98a3e;
-  --color-hold-bg: #f7efdf;
+  --color-good: #2e9e6b;
+  --color-bad: #d0492f;
+  /* The one warm accent in the whole system — held/reserve pills only. */
+  --color-hold: #b07a2e;
+  --color-hold-bg: #f5eee2;
 
   /* Growth-graph specific: pale-blue "contributed" line + fill. */
   --color-contributed: #8fb8e0;
@@ -37,7 +39,9 @@
   --color-hold-bg: var(--color-hold-bg);
   --color-contributed: var(--color-contributed);
 
-  --font-display: var(--font-fraunces);
+  /* Sans-first, everywhere — no serif. "Display" is just a tighter-tracked
+     sans reserved for headings and money figures. */
+  --font-display: var(--font-inter-tight);
   --font-sans: var(--font-inter);
 }
 

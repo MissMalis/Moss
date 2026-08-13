@@ -12,9 +12,20 @@ async function requireUser() {
   return { supabase, user };
 }
 
-function revalidate() {
-  revalidatePath("/cards");
-  revalidatePath("/net-worth");
+// Card/multiplier management lives on Portfolio; charges, sweeping, and
+// reconciliation live on Sweep. Only sweeping also touches account
+// balances, so only that also revalidates Portfolio's net-worth numbers.
+function revalidatePortfolio() {
+  revalidatePath("/portfolio");
+}
+
+function revalidateSweep() {
+  revalidatePath("/sweep");
+}
+
+function revalidateSweepAndPortfolio() {
+  revalidatePath("/sweep");
+  revalidatePath("/portfolio");
 }
 
 // ---- Cards ----
@@ -32,7 +43,7 @@ export async function createCard(formData: FormData) {
     .from("cards")
     .insert({ user_id: user.id, name, last4, network, color, base_multiplier });
   if (error) throw error;
-  revalidate();
+  revalidatePortfolio();
 }
 
 export async function deleteCard(formData: FormData) {
@@ -40,7 +51,7 @@ export async function deleteCard(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   const { error } = await supabase.from("cards").delete().eq("id", id);
   if (error) throw error;
-  revalidate();
+  revalidatePortfolio();
 }
 
 // ---- Point multipliers ----
@@ -59,7 +70,7 @@ export async function createMultiplier(formData: FormData) {
       { onConflict: "card_id,category_id" },
     );
   if (error) throw error;
-  revalidate();
+  revalidatePortfolio();
 }
 
 export async function deleteMultiplier(formData: FormData) {
@@ -67,7 +78,7 @@ export async function deleteMultiplier(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   const { error } = await supabase.from("card_category_multipliers").delete().eq("id", id);
   if (error) throw error;
-  revalidate();
+  revalidatePortfolio();
 }
 
 // ---- Card charges (quarantined from Safe-to-Spend until swept) ----
@@ -87,7 +98,7 @@ export async function createCardCharge(formData: FormData) {
     .from("card_charges")
     .insert({ user_id: user.id, card_id, category_id, name, amount, spent_on });
   if (error) throw error;
-  revalidate();
+  revalidateSweep();
 }
 
 export async function deleteCardCharge(formData: FormData) {
@@ -97,7 +108,7 @@ export async function deleteCardCharge(formData: FormData) {
   // money into the Forbidden Money bucket, so deleting it would desync them.
   const { error } = await supabase.from("card_charges").delete().eq("id", id).eq("swept", false);
   if (error) throw error;
-  revalidate();
+  revalidateSweep();
 }
 
 // ---- Sweeper: batch-quarantine pending charges into Forbidden Money ----
@@ -140,7 +151,7 @@ export async function sweepPendingCharges() {
     .eq("id", bucket.id);
   if (updateBucketError) throw updateBucketError;
 
-  revalidate();
+  revalidateSweepAndPortfolio();
 }
 
 // ---- Forbidden Money bucket + reconciliation ----
@@ -159,7 +170,7 @@ export async function markForbiddenMoneyAccount(formData: FormData) {
 
   const { error } = await supabase.from("accounts").update({ is_forbidden_money: true }).eq("id", id);
   if (error) throw error;
-  revalidate();
+  revalidateSweep();
 }
 
 export async function reconcileForbiddenMoney(formData: FormData) {
@@ -170,10 +181,10 @@ export async function reconcileForbiddenMoney(formData: FormData) {
 
   const { error } = await supabase.from("accounts").update({ reconciled_balance }).eq("id", id);
   if (error) throw error;
-  revalidate();
+  revalidateSweep();
 }
 
-// ---- Which card is the mock Cash App card ----
+// ---- Which card is the mock channeling-card visual ----
 
 export async function setCashAppCard(formData: FormData) {
   const { supabase, user } = await requireUser();
@@ -183,5 +194,5 @@ export async function setCashAppCard(formData: FormData) {
     .from("settings")
     .upsert({ user_id: user.id, cash_app_card_id }, { onConflict: "user_id" });
   if (error) throw error;
-  revalidate();
+  revalidatePortfolio();
 }

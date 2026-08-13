@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { listCategories, listRecurringItems, listOccurrencesInRange } from "@/lib/data/recurring";
-import { listIncomeSources, listDeductions } from "@/lib/data/income";
+import { listIncomeSources, listDeductions, listPurchasesInRange } from "@/lib/data/income";
+import { listAccounts } from "@/lib/data/accounts";
+import { deletePurchase, loadStoredValue } from "@/lib/actions/income";
+import { LogExpenseForm } from "@/components/LogExpenseForm";
 import { buildOccurrencesForWindow, sumEarmarked } from "@/lib/recurring";
 import {
   createCategory,
@@ -27,15 +30,24 @@ function currentMonthWindow() {
   return { start, end };
 }
 
-export default async function RecurringPage() {
+const INVESTING_TYPES = new Set(["HSA", "401(k)", "Roth IRA", "Traditional IRA", "Taxable Brokerage"]);
+
+export default async function ExpensesPage() {
   const { start, end } = currentMonthWindow();
-  const [categories, items, occurrenceRows, deductions, incomeSources] = await Promise.all([
-    listCategories(),
-    listRecurringItems(),
-    listOccurrencesInRange(start, end),
-    listDeductions(),
-    listIncomeSources(),
-  ]);
+  const [categories, items, occurrenceRows, deductions, incomeSources, purchases, accounts] =
+    await Promise.all([
+      listCategories(),
+      listRecurringItems(),
+      listOccurrencesInRange(start, end),
+      listDeductions(),
+      listIncomeSources(),
+      listPurchasesInRange(start, end),
+      listAccounts(),
+    ]);
+
+  const investingAccounts = accounts.filter((a) => INVESTING_TYPES.has(a.type));
+  const storedValueAccounts = accounts.filter((a) => a.type === "Stored-value");
+  const accountById = new Map(accounts.map((a) => [a.id, a]));
 
   const occurrenceState = new Map(
     occurrenceRows.map((o) => [`${o.recurring_item_id}|${o.occ_date}`, o]),
@@ -49,7 +61,7 @@ export default async function RecurringPage() {
   const contributionsTotal = deductions.reduce((s, d) => s + d.amount, 0);
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-8">
       <section>
         <p className="text-[12.5px] uppercase tracking-wide text-ink-3">
           This month, earmarked
@@ -58,6 +70,10 @@ export default async function RecurringPage() {
           {formatMoney(earmarked + contributionsTotal)}
         </p>
       </section>
+
+      <h1 className="font-display text-[13px] uppercase tracking-wide text-ink-3">
+        Zone 1 — Recurring bills &amp; subscriptions
+      </h1>
 
       <section>
         <h2 className="mb-3 font-display text-[22px] font-medium text-ink">
@@ -292,7 +308,7 @@ export default async function RecurringPage() {
           </div>
         )}
 
-        <details className="mt-4 rounded-[20px] border border-border bg-card p-5">
+        <details className="mt-4 rounded-xl border border-border bg-card p-5">
           <summary className="cursor-pointer text-[13px] text-ink-2">Add a bill</summary>
           <form action={createRecurringItem} className="mt-3 flex flex-wrap items-end gap-3">
             <label className={LABEL}>
@@ -360,6 +376,72 @@ export default async function RecurringPage() {
           </button>
         </form>
       </section>
+
+      <h2 className="font-display text-[13px] uppercase tracking-wide text-ink-3">
+        Zone 2 — Log a one-off expense
+      </h2>
+
+      <section>
+        <LogExpenseForm investingAccounts={investingAccounts} storedValueAccounts={storedValueAccounts} />
+
+        {purchases.length === 0 ? (
+          <EmptyState emoji="🧋" title="Nothing logged this month yet" />
+        ) : (
+          <div className="mt-4 space-y-1.5">
+            {purchases.map((p) => {
+              const sourceAccount = p.source_account_id ? accountById.get(p.source_account_id) : null;
+              return (
+                <div key={p.id} className={`${ROW} flex items-center justify-between`}>
+                  <span className="text-[13.5px] text-ink">
+                    {p.name}{" "}
+                    <span className="text-ink-3">
+                      · {formatShortDateLabel(p.spent_on)} · {p.category}
+                      {p.payment_source !== "checking" && sourceAccount && ` · ${sourceAccount.name}`}
+                    </span>
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[13.5px] text-ink tabular-nums">{formatMoney(p.amount)}</span>
+                    <form action={deletePurchase}>
+                      <input type="hidden" name="id" value={p.id} />
+                      <button type="submit" className={LINK_QUIET}>
+                        Remove
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {storedValueAccounts.length > 0 && (
+        <section>
+          <h2 className="mb-3 font-display text-[22px] font-medium text-ink">Load a stored-value card</h2>
+          <p className="mb-3 text-[13px] text-ink-2">
+            Funding the card from checking is the one Safe-to-Spend hit — spending it down later isn&apos;t.
+          </p>
+          <form action={loadStoredValue} className="flex flex-wrap items-end gap-3">
+            <label className={LABEL}>
+              Card
+              <select name="account_id" className={INPUT}>
+                {storedValueAccounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} ({formatMoney(a.balance)})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={LABEL}>
+              Amount
+              <input type="number" step="0.01" name="amount" required className={`w-28 ${INPUT}`} />
+            </label>
+            <button type="submit" className={BTN_SOLID}>
+              Load it
+            </button>
+          </form>
+        </section>
+      )}
     </div>
   );
 }

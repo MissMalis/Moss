@@ -7,6 +7,10 @@ import { listRecurringItems, listOccurrencesInRange } from "@/lib/data/recurring
 
 const LOOKBACK_MONTHS = 6;
 
+type IncomeSources = Awaited<ReturnType<typeof listIncomeSources>>;
+type Deductions = Awaited<ReturnType<typeof listDeductions>>;
+type RecurringItems = Awaited<ReturnType<typeof listRecurringItems>>;
+
 /**
  * Lazy period-close job (brief §3): any window whose end has passed and
  * isn't marked closed yet gets its final numbers computed and frozen into
@@ -14,8 +18,16 @@ const LOOKBACK_MONTHS = 6;
  * they were. Runs oldest-first so each period's rollover can read the
  * previous (now-closed) period's frozen safe_to_spend, building a real
  * chain instead of a live approximation.
+ *
+ * Accepts already-fetched income sources/deductions/recurring items when
+ * the caller (Today) has them, to skip a duplicate round of queries it's
+ * about to make again right after this returns.
  */
-export async function closeElapsedPeriods() {
+export async function closeElapsedPeriods(preloaded?: {
+  incomeSources: IncomeSources;
+  deductions: Deductions;
+  recurringItems: RecurringItems;
+}) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -24,11 +36,9 @@ export async function closeElapsedPeriods() {
 
   const todayISO = new Date().toISOString().slice(0, 10);
 
-  const [incomeSources, deductions, recurringItems] = await Promise.all([
-    listIncomeSources(),
-    listDeductions(),
-    listRecurringItems(),
-  ]);
+  const [incomeSources, deductions, recurringItems] = preloaded
+    ? [preloaded.incomeSources, preloaded.deductions, preloaded.recurringItems]
+    : await Promise.all([listIncomeSources(), listDeductions(), listRecurringItems()]);
 
   const primarySource = incomeSources.find((s) => s.freq !== "one-off");
   if (!primarySource) return;
@@ -89,7 +99,10 @@ export async function closeElapsedPeriods() {
     const earmarked = sumEarmarked(earmarkedItems);
     const income = netIncomeForWindow(incomeSources, deductions, window, window.payDate);
     const purchasesInWindow = await listPurchasesInRange(window.start, window.end);
-    const purchasesTotal = purchasesInWindow.reduce((s, p) => s + p.amount, 0);
+    // Only checking-sourced spending hit Safe-to-Spend (brief rev 02 §3).
+    const purchasesTotal = purchasesInWindow
+      .filter((p) => p.payment_source === "checking")
+      .reduce((s, p) => s + p.amount, 0);
     const autoReserve = computeAutoReserve(
       primarySource,
       incomeSources,

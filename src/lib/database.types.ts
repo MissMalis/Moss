@@ -34,9 +34,12 @@ export interface Database {
         name: string;
         type:
           | "Cash"
+          | "HYSA"
+          | "Stored-value"
           | "HSA"
           | "Roth IRA"
           | "Traditional IRA"
+          | "401(k)"
           | "Taxable Brokerage"
           | "Liabilities";
         balance: number;
@@ -45,6 +48,8 @@ export interface Database {
         starting_contributed: number;
         is_forbidden_money: boolean;
         reconciled_balance: number | null;
+        apy_pct: number | null;
+        annual_contribution_limit: number | null;
         created_at: string;
       }>;
       holdings: Row<{
@@ -78,6 +83,7 @@ export interface Database {
         amount: number;
         employer_match: number;
         target_account_key: string | null;
+        tax_treatment: "pre_tax" | "post_tax";
         created_at: string;
       }>;
       categories: Row<{
@@ -118,6 +124,8 @@ export interface Database {
         amount: number;
         spent_on: string;
         category: string;
+        payment_source: "checking" | "investing" | "stored_value";
+        source_account_id: string | null;
         created_at: string;
       }>;
       pay_periods: Row<{

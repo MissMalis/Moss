@@ -1,9 +1,9 @@
-// Pure net-worth aggregation. An account's value comes from its holdings
-// when it has any (so a brokerage/retirement account's market value doesn't
-// double-count against its stored `balance`); otherwise the stored balance
-// is used directly (plain cash accounts, or system accounts fed by
-// paycheck contributions). Liabilities balances are stored positive and
-// subtracted.
+// Pure net-worth aggregation. An account's value is its stored `balance`
+// (the cash sleeve — brief rev 02 §4: "contributions always land in cash
+// first") plus whatever holdings it has, if any. For a plain Cash account
+// or a "lump" investable account with no positions entered, holdings value
+// is simply zero, so this reduces to the balance alone. Liabilities
+// balances are stored positive and subtracted.
 
 export interface AccountForNetWorth {
   id: string;
@@ -46,8 +46,8 @@ export function computeNetWorth(
   }
 
   const accountValues: AccountValuation[] = accounts.map((a) => {
-    const holdingsValue = holdingsValueByAccount.get(a.id);
-    const rawValue = holdingsValue !== undefined ? holdingsValue : a.balance;
+    const holdingsValue = holdingsValueByAccount.get(a.id) ?? 0;
+    const rawValue = a.balance + holdingsValue;
     const value = a.type === "Liabilities" ? -Math.abs(rawValue) : rawValue;
     return { id: a.id, name: a.name, type: a.type, value };
   });
@@ -64,7 +64,10 @@ export function computeNetWorth(
 
 const ACCOUNT_EMOJI: Record<string, string> = {
   Cash: "💵",
+  HYSA: "🏦",
+  "Stored-value": "🚊",
   HSA: "🏥",
+  "401(k)": "🧓",
   "Roth IRA": "🌱",
   "Traditional IRA": "🏛️",
   "Taxable Brokerage": "📈",

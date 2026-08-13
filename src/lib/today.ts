@@ -21,6 +21,7 @@ export interface DeductionLike {
   amount: number;
   employer_match: number;
   target_account_key: string | null;
+  tax_treatment: "pre_tax" | "post_tax";
 }
 
 function windowsAround(source: IncomeSourceLike, todayISO: string): PayWindow[] {
@@ -60,13 +61,19 @@ export function findFutureWindows(
   return windows.filter((w) => w.payDate > currentWindow.payDate).slice(0, count);
 }
 
+// Pre-tax contributions (401k, HSA, Traditional IRA by default) never
+// touched take-home in the first place — net_per_check already excludes
+// them — so subtracting them again would double-count against money the
+// user never had. Only post-tax (Roth) contributions come out of money
+// that already landed in checking, so only those reduce Safe-to-Spend.
+// Employer match never touches this at all — it isn't the user's money.
 function deductionsTotalForSource(deductions: DeductionLike[], sourceId: string): number {
   return deductions
-    .filter((d) => d.income_source_id === sourceId)
+    .filter((d) => d.income_source_id === sourceId && d.tax_treatment === "post_tax")
     .reduce((sum, d) => sum + d.amount, 0);
 }
 
-/** Sum of (net_per_check - deductions) for every pay event any source has inside [start,end]. */
+/** Sum of (net_per_check - post-tax deductions) for every pay event any source has inside [start,end]. */
 export function netIncomeForWindow(
   sources: IncomeSourceLike[],
   deductions: DeductionLike[],

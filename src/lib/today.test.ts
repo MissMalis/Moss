@@ -35,11 +35,35 @@ describe("windowsAround / findCurrentWindow", () => {
 });
 
 describe("netIncomeForWindow", () => {
-  it("subtracts deductions from net_per_check for each pay event in the window", () => {
+  it("does NOT subtract pre-tax deductions — net_per_check already excludes them (rev 02 §7)", () => {
     const windows = windowsAround(biweekly, "2026-01-10");
     const current = findCurrentWindow(windows, "2026-01-10")!;
     const deductions = [
-      { id: "d1", income_source_id: "src1", amount: 150, employer_match: 75, target_account_key: "hsa" },
+      {
+        id: "d1",
+        income_source_id: "src1",
+        amount: 150,
+        employer_match: 75,
+        target_account_key: "hsa",
+        tax_treatment: "pre_tax" as const,
+      },
+    ];
+    const income = netIncomeForWindow([biweekly], deductions, current, "2026-01-10");
+    expect(income).toBe(2000);
+  });
+
+  it("subtracts post-tax (Roth) deductions — that money already landed in checking", () => {
+    const windows = windowsAround(biweekly, "2026-01-10");
+    const current = findCurrentWindow(windows, "2026-01-10")!;
+    const deductions = [
+      {
+        id: "d1",
+        income_source_id: "src1",
+        amount: 150,
+        employer_match: 0,
+        target_account_key: "roth",
+        tax_treatment: "post_tax" as const,
+      },
     ];
     const income = netIncomeForWindow([biweekly], deductions, current, "2026-01-10");
     expect(income).toBe(2000 - 150);

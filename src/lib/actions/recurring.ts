@@ -15,7 +15,7 @@ async function requireUser() {
 }
 
 function revalidate() {
-  revalidatePath("/recurring");
+  revalidatePath("/expenses");
   revalidatePath("/today");
 }
 

@@ -7,7 +7,7 @@ export default async function SettingsPage() {
   const settings = await getSettings();
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-8">
       <section>
         <h1 className="font-display text-[28px] font-medium text-ink">Settings</h1>
         <p className="mt-1 text-[13px] text-ink-2">
@@ -26,8 +26,10 @@ export default async function SettingsPage() {
           </label>
 
           <label className={LABEL}>
-            Business-day rule
-            <Tooltip text="If a bill or payday lands on a weekend, shift it to the nearest banking day instead. True bank-holiday calendars aren't machine-readable yet, so this only accounts for weekends." />
+            <span className="flex items-center gap-1">
+              Business-day rule
+              <Tooltip text="If a bill or payday lands on a weekend, shift it to the nearest banking day instead. True bank-holiday calendars aren't machine-readable yet, so this only accounts for weekends." />
+            </span>
             <select name="biz_shift" defaultValue={settings.biz_shift} className={`max-w-xs ${INPUT}`}>
               <option value="none">Don&apos;t shift</option>
               <option value="prior">Shift to the day before</option>

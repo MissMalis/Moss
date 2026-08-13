@@ -429,3 +429,31 @@ begin
       foreign key (cash_app_card_id) references cards(id) on delete set null;
   end if;
 end $$;
+
+-- ============================================================
+-- Revision 02.
+-- ============================================================
+
+-- §7: pre-tax contributions never touched take-home in the first place, so
+-- they must not be subtracted from Safe-to-Spend again — only post-tax
+-- (Roth) contributions draw down money you already received. Default
+-- pre_tax since 401k/HSA/Traditional IRA are the common case.
+alter table deductions add column if not exists tax_treatment text default 'pre_tax';
+alter table deductions drop constraint if exists deductions_tax_treatment_check;
+alter table deductions add constraint deductions_tax_treatment_check
+  check (tax_treatment in ('pre_tax', 'post_tax'));
+
+-- §3: every expense now carries a payment source, which decides whether it
+-- draws down Safe-to-Spend (checking, or a stored-value load) or is
+-- quarantined elsewhere (rewards card -> Sweep; investing/stored-value
+-- spend -> that account's own balance, no Safe-to-Spend impact).
+alter table purchases add column if not exists payment_source text default 'checking';
+alter table purchases drop constraint if exists purchases_payment_source_check;
+alter table purchases add constraint purchases_payment_source_check
+  check (payment_source in ('checking', 'investing', 'stored_value'));
+alter table purchases add column if not exists source_account_id uuid references accounts on delete set null;
+
+-- §4: HYSA interest and per-account annual contribution limits (informational
+-- only — Moss warns as you approach the limit, it doesn't enforce it).
+alter table accounts add column if not exists apy_pct numeric(5,3);
+alter table accounts add column if not exists annual_contribution_limit numeric(12,2);

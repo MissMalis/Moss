@@ -8,7 +8,7 @@ export function EmptyState({
   hint?: string;
 }) {
   return (
-    <div className="flex flex-col items-center gap-1.5 rounded-[20px] border border-dashed border-border-strong bg-card-soft px-6 py-10 text-center">
+    <div className="flex flex-col items-center gap-1.5 rounded-xl border border-dashed border-border-strong bg-card-soft px-6 py-10 text-center">
       <span className="text-2xl" aria-hidden>
         {emoji}
       </span>

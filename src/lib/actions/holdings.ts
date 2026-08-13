@@ -32,7 +32,7 @@ export async function createHolding(formData: FormData) {
     buy_date,
   });
   if (error) throw error;
-  revalidatePath("/net-worth");
+  revalidatePath("/portfolio");
 }
 
 export async function updateHoldingPrice(formData: FormData) {
@@ -46,7 +46,7 @@ export async function updateHoldingPrice(formData: FormData) {
     .update({ current_price })
     .eq("id", id);
   if (error) throw error;
-  revalidatePath("/net-worth");
+  revalidatePath("/portfolio");
 }
 
 export async function deleteHolding(formData: FormData) {
@@ -56,5 +56,5 @@ export async function deleteHolding(formData: FormData) {
 
   const { error } = await supabase.from("holdings").delete().eq("id", id);
   if (error) throw error;
-  revalidatePath("/net-worth");
+  revalidatePath("/portfolio");
 }

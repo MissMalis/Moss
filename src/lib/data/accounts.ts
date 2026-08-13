@@ -2,7 +2,10 @@ import { createClient } from "@/lib/supabase/server";
 
 export const ACCOUNT_TYPES = [
   "Cash",
+  "HYSA",
+  "Stored-value",
   "HSA",
+  "401(k)",
   "Roth IRA",
   "Traditional IRA",
   "Taxable Brokerage",

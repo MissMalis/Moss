@@ -52,8 +52,10 @@ export function IncomeSourceForm() {
 
       {(freq === "biweekly" || freq === "weekly") && (
         <label className={LABEL}>
-          Anchor payday
-          <Tooltip text="One real payday to count from — we count every 7 or 14 days out from here." />
+          <span className="flex items-center gap-1">
+            Anchor payday
+            <Tooltip text="One real payday to count from — we count every 7 or 14 days out from here." />
+          </span>
           <input type="date" name="anchor_date" required className={INPUT} />
         </label>
       )}

@@ -1,12 +1,23 @@
 import { createClient } from "@/lib/supabase/server";
+import type { Database } from "@/lib/database.types";
+
+type AccountRow = Database["public"]["Tables"]["accounts"]["Row"];
+type HoldingRow = Database["public"]["Tables"]["holdings"]["Row"];
 
 /**
  * Lazily upserts today's per-account snapshot (contributed vs market value)
  * for every account with real market movement to track — same "close on
  * next visit" pattern the build brief uses for pay periods. Cash/liability
  * accounts are skipped: they have no market value of their own.
+ *
+ * Accepts already-fetched accounts/holdings when the caller has them, so
+ * this doesn't re-query data the page is about to fetch again anyway —
+ * that duplicate round-trip was a real, measurable chunk of page latency.
  */
-export async function ensureSnapshotsForToday() {
+export async function ensureSnapshotsForToday(preloaded?: {
+  accounts: AccountRow[];
+  holdings: HoldingRow[];
+}) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -15,16 +26,25 @@ export async function ensureSnapshotsForToday() {
 
   const todayISO = new Date().toISOString().slice(0, 10);
 
-  const [{ data: accounts, error: accErr }, { data: holdings, error: holdErr }] =
-    await Promise.all([
-      supabase.from("accounts").select("*").eq("user_id", user.id),
-      supabase.from("holdings").select("*").eq("user_id", user.id),
-    ]);
-  if (accErr) throw accErr;
-  if (holdErr) throw holdErr;
+  let accounts: AccountRow[];
+  let holdings: HoldingRow[];
+  if (preloaded) {
+    accounts = preloaded.accounts;
+    holdings = preloaded.holdings;
+  } else {
+    const [{ data: accountsData, error: accErr }, { data: holdingsData, error: holdErr }] =
+      await Promise.all([
+        supabase.from("accounts").select("*").eq("user_id", user.id),
+        supabase.from("holdings").select("*").eq("user_id", user.id),
+      ]);
+    if (accErr) throw accErr;
+    if (holdErr) throw holdErr;
+    accounts = accountsData ?? [];
+    holdings = holdingsData ?? [];
+  }
 
   const holdingsByAccount = new Map<string, typeof holdings>();
-  for (const h of holdings ?? []) {
+  for (const h of holdings) {
     if (!h.account_id) continue;
     holdingsByAccount.set(h.account_id, [...(holdingsByAccount.get(h.account_id) ?? []), h]);
   }
@@ -52,7 +72,7 @@ export async function ensureSnapshotsForToday() {
 
   const rows: { user_id: string; account_id: string; snapshot_date: string; contributed: number; market_value: number }[] = [];
 
-  for (const account of accounts ?? []) {
+  for (const account of accounts) {
     const accountHoldings = holdingsByAccount.get(account.id) ?? [];
     const hasHoldings = accountHoldings.length > 0;
     const trackable = hasHoldings || account.is_system;
@@ -62,7 +82,9 @@ export async function ensureSnapshotsForToday() {
     let contributed: number;
 
     if (hasHoldings) {
-      marketValue = accountHoldings.reduce((s, h) => s + h.qty * h.current_price, 0);
+      // Cash sleeve (balance) + holdings — matches computeNetWorth (net-worth.ts).
+      marketValue =
+        (account.balance ?? 0) + accountHoldings.reduce((s, h) => s + h.qty * h.current_price, 0);
       contributed =
         (account.starting_contributed ?? 0) +
         accountHoldings.reduce((s, h) => s + h.qty * h.cost_basis, 0);

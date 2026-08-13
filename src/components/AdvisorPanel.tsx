@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BTN_SOLID, CARD, INPUT } from "@/lib/ui";
+import { BTN_SOLID, INPUT } from "@/lib/ui";
 
 export function AdvisorPanel() {
   const [question, setQuestion] = useState("");
@@ -35,20 +35,20 @@ export function AdvisorPanel() {
   }
 
   return (
-    <div className={CARD}>
-      <form onSubmit={ask} className="flex flex-wrap items-end gap-3">
+    <div>
+      <form onSubmit={ask} className="flex flex-wrap items-end gap-2">
         <input
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
           placeholder="Can I afford to eat out this week?"
-          className={`min-w-[240px] flex-1 ${INPUT}`}
+          className={`min-w-[180px] flex-1 ${INPUT}`}
         />
         <button type="submit" disabled={pending} className={BTN_SOLID}>
-          {pending ? "Thinking…" : "Ask"}
+          {pending ? "…" : "Ask"}
         </button>
       </form>
       {error && <p className="mt-3 text-[13px] text-bad">{error}</p>}
-      {answer && <p className="mt-3 text-[14px] leading-relaxed text-ink-2">{answer}</p>}
+      {answer && <p className="mt-3 text-[13.5px] leading-relaxed text-ink-2">{answer}</p>}
     </div>
   );
 }

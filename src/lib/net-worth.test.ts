@@ -2,15 +2,15 @@ import { describe, expect, it } from "vitest";
 import { aggregateSnapshots, computeNetWorth } from "./net-worth";
 
 describe("computeNetWorth", () => {
-  it("uses holdings market value instead of the stored balance when holdings exist", () => {
+  it("adds holdings market value on top of the cash sleeve (balance) when holdings exist", () => {
     const result = computeNetWorth(
       [{ id: "a1", name: "Brokerage", type: "Taxable Brokerage", balance: 500 }],
       [{ account_id: "a1", qty: 10, current_price: 100 }],
     );
-    expect(result.total).toBe(1000); // not 500 + 1000
+    expect(result.total).toBe(1500); // $500 cash sleeve + $1000 holdings, not one or the other
   });
 
-  it("falls back to stored balance when an account has no holdings", () => {
+  it("uses balance alone (a 'lump' account) when there are no holdings", () => {
     const result = computeNetWorth(
       [{ id: "a1", name: "Checking", type: "Cash", balance: 2500 }],
       [],

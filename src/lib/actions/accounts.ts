@@ -19,6 +19,15 @@ async function requireUser() {
   return { supabase, user };
 }
 
+// The user never sees or types this — it's purely the internal link a
+// deduction's "posts to" dropdown resolves against (brief rev 02 §2.5).
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
 export async function createAccount(formData: FormData) {
   const { supabase, user } = await requireUser();
   const name = String(formData.get("name") ?? "").trim();
@@ -26,7 +35,12 @@ export async function createAccount(formData: FormData) {
   const balance = Number(formData.get("balance") ?? 0);
   const starting_contributed = Number(formData.get("starting_contributed") ?? 0);
   const is_system = formData.get("is_system") === "on";
-  const system_key = String(formData.get("system_key") ?? "").trim() || null;
+  const system_key = is_system ? slugify(name) : null;
+  const apy_pctRaw = formData.get("apy_pct");
+  const apy_pct = apy_pctRaw != null && apy_pctRaw !== "" ? Number(apy_pctRaw) : null;
+  const annualLimitRaw = formData.get("annual_contribution_limit");
+  const annual_contribution_limit =
+    annualLimitRaw != null && annualLimitRaw !== "" ? Number(annualLimitRaw) : null;
   if (!name || !type) throw new Error("Name and type are required");
   if (!isAccountType(type)) throw new Error("Invalid account type");
 
@@ -38,9 +52,11 @@ export async function createAccount(formData: FormData) {
     starting_contributed,
     is_system,
     system_key,
+    apy_pct,
+    annual_contribution_limit,
   });
   if (error) throw error;
-  revalidatePath("/net-worth");
+  revalidatePath("/portfolio");
 }
 
 export async function updateAccountBalance(formData: FormData) {
@@ -51,7 +67,7 @@ export async function updateAccountBalance(formData: FormData) {
 
   const { error } = await supabase.from("accounts").update({ balance }).eq("id", id);
   if (error) throw error;
-  revalidatePath("/net-worth");
+  revalidatePath("/portfolio");
 }
 
 export async function updateStartingContributed(formData: FormData) {
@@ -65,7 +81,7 @@ export async function updateStartingContributed(formData: FormData) {
     .update({ starting_contributed })
     .eq("id", id);
   if (error) throw error;
-  revalidatePath("/net-worth");
+  revalidatePath("/portfolio");
 }
 
 export async function deleteAccount(formData: FormData) {
@@ -75,5 +91,5 @@ export async function deleteAccount(formData: FormData) {
 
   const { error } = await supabase.from("accounts").delete().eq("id", id);
   if (error) throw error;
-  revalidatePath("/net-worth");
+  revalidatePath("/portfolio");
 }

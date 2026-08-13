@@ -14,9 +14,10 @@ export default async function IncomePage() {
     listAccounts(),
   ]);
   const systemAccounts = accounts.filter((a) => a.is_system && a.system_key);
+  const accountByKey = new Map(systemAccounts.map((a) => [a.system_key, a.name]));
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-8">
       <section>
         <h1 className="font-display text-[28px] font-medium text-ink">Income</h1>
         <p className="mt-1 text-[13px] text-ink-2">
@@ -49,7 +50,7 @@ export default async function IncomePage() {
           ))}
         </div>
 
-        <details className="mt-4 rounded-[20px] border border-border bg-card p-5">
+        <details className="mt-4 rounded-xl border border-border bg-card p-5">
           <summary className="cursor-pointer text-[13px] text-ink-2">Add income</summary>
           <IncomeSourceForm />
         </details>
@@ -58,10 +59,11 @@ export default async function IncomePage() {
       <section>
         <h2 className="font-display text-[22px] font-medium text-ink">Contributions</h2>
         <p className="mt-1 text-[13px] text-ink-2">
-          401k, HSA, and similar — these reduce take-home for earmarking and post to the matching
-          net-worth account, including employer match, once you mark that pay date posted.
-          They&apos;ll also show up under &quot;Contributions&quot; in Recurring so you can see the
-          whole period at a glance.
+          401k, HSA, and similar — these post to the matching account, including employer match,
+          once you mark that pay date posted. Pre-tax contributions never touched your take-home,
+          so they don&apos;t reduce Safe to spend; post-tax (Roth) does, since that money already
+          landed in checking. They&apos;ll also show up under &quot;Contributions&quot; in Expenses
+          so you can see the whole period at a glance.
         </p>
 
         <div className="mt-4 space-y-2">
@@ -77,7 +79,9 @@ export default async function IncomePage() {
                   <p className="text-[12.5px] text-ink-2">
                     {source?.name ?? "—"} · {formatMoney(d.amount)}
                     {d.employer_match > 0 && ` + ${formatMoney(d.employer_match)} match`}
-                    {d.target_account_key && ` · posts to ${d.target_account_key}`}
+                    {d.target_account_key && ` · posts to ${accountByKey.get(d.target_account_key) ?? d.target_account_key}`}
+                    {" · "}
+                    {d.tax_treatment === "pre_tax" ? "pre-tax" : "post-tax (Roth)"}
                   </p>
                 </div>
                 <form action={deleteDeduction}>
@@ -92,7 +96,7 @@ export default async function IncomePage() {
         </div>
 
         {incomeSources.length > 0 && (
-          <details className="mt-4 rounded-[20px] border border-border bg-card p-5">
+          <details className="mt-4 rounded-xl border border-border bg-card p-5">
             <summary className="cursor-pointer text-[13px] text-ink-2">Add a contribution</summary>
             <form action={createDeduction} className="mt-3 flex flex-wrap items-end gap-3">
               <label className={LABEL}>
@@ -130,13 +134,25 @@ export default async function IncomePage() {
                 />
               </label>
               <label className={LABEL}>
-                Posts to account
-                <Tooltip text="Which net-worth account this credits — you and your employer's match both land here when you mark the pay date posted." />
+                <span className="flex items-center gap-1">
+                  Tax treatment
+                  <Tooltip text="Pre-tax (401k, HSA, Traditional IRA) never touched your take-home, so it doesn't reduce Safe to spend. Post-tax (Roth) comes out of money you already received, so it does." />
+                </span>
+                <select name="tax_treatment" defaultValue="pre_tax" className={INPUT}>
+                  <option value="pre_tax">Pre-tax</option>
+                  <option value="post_tax">Post-tax (Roth)</option>
+                </select>
+              </label>
+              <label className={LABEL}>
+                <span className="flex items-center gap-1">
+                  Posts to account
+                  <Tooltip text="Which net-worth account this credits — you and your employer's match both land here when you mark the pay date posted." />
+                </span>
                 <select name="target_account_key" className={INPUT}>
                   <option value="">No posting</option>
                   {systemAccounts.map((a) => (
                     <option key={a.id} value={a.system_key ?? ""}>
-                      {a.name} ({a.system_key})
+                      {a.name}
                     </option>
                   ))}
                 </select>
@@ -148,7 +164,7 @@ export default async function IncomePage() {
             {systemAccounts.length === 0 && (
               <p className="mt-2 text-[12.5px] text-ink-3">
                 No accounts are marked to receive contributions yet — set one up as &quot;fed by
-                paycheck contributions&quot; on the Net worth tab, or leave this as &quot;No
+                paycheck contributions&quot; on the Portfolio tab, or leave this as &quot;No
                 posting&quot;.
               </p>
             )}
