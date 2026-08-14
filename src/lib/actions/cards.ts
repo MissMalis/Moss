@@ -12,20 +12,17 @@ async function requireUser() {
   return { supabase, user };
 }
 
-// Card/multiplier management lives on Portfolio; charges, sweeping, and
-// reconciliation live on Sweep. Only sweeping also touches account
-// balances, so only that also revalidates Portfolio's net-worth numbers.
-function revalidatePortfolio() {
-  revalidatePath("/portfolio");
-}
-
+// Card/multiplier management, charges, sweeping, and reconciliation all
+// live on Sweep now (rev 03 §3 — Net worth is Assets/Liabilities only, no
+// cards). Only sweeping also touches an account balance, so only that also
+// revalidates Net worth's numbers.
 function revalidateSweep() {
   revalidatePath("/sweep");
 }
 
-function revalidateSweepAndPortfolio() {
+function revalidateSweepAndNetWorth() {
   revalidatePath("/sweep");
-  revalidatePath("/portfolio");
+  revalidatePath("/net-worth");
 }
 
 // ---- Cards ----
@@ -43,7 +40,25 @@ export async function createCard(formData: FormData) {
     .from("cards")
     .insert({ user_id: user.id, name, last4, network, color, base_multiplier });
   if (error) throw error;
-  revalidatePortfolio();
+  revalidateSweep();
+}
+
+export async function updateCard(formData: FormData) {
+  const { supabase } = await requireUser();
+  const id = String(formData.get("id") ?? "");
+  const name = String(formData.get("name") ?? "").trim();
+  const last4 = String(formData.get("last4") ?? "").trim() || null;
+  const network = String(formData.get("network") ?? "").trim() || null;
+  const color = String(formData.get("color") ?? "#14181C").trim() || "#14181C";
+  const base_multiplier = Number(formData.get("base_multiplier") ?? 1);
+  if (!id || !name) throw new Error("Name is required");
+
+  const { error } = await supabase
+    .from("cards")
+    .update({ name, last4, network, color, base_multiplier })
+    .eq("id", id);
+  if (error) throw error;
+  revalidateSweep();
 }
 
 export async function deleteCard(formData: FormData) {
@@ -51,7 +66,7 @@ export async function deleteCard(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   const { error } = await supabase.from("cards").delete().eq("id", id);
   if (error) throw error;
-  revalidatePortfolio();
+  revalidateSweep();
 }
 
 // ---- Point multipliers ----
@@ -70,7 +85,7 @@ export async function createMultiplier(formData: FormData) {
       { onConflict: "card_id,category_id" },
     );
   if (error) throw error;
-  revalidatePortfolio();
+  revalidateSweep();
 }
 
 export async function deleteMultiplier(formData: FormData) {
@@ -78,7 +93,7 @@ export async function deleteMultiplier(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   const { error } = await supabase.from("card_category_multipliers").delete().eq("id", id);
   if (error) throw error;
-  revalidatePortfolio();
+  revalidateSweep();
 }
 
 // ---- Card charges (quarantined from Safe-to-Spend until swept) ----
@@ -151,7 +166,7 @@ export async function sweepPendingCharges() {
     .eq("id", bucket.id);
   if (updateBucketError) throw updateBucketError;
 
-  revalidateSweepAndPortfolio();
+  revalidateSweepAndNetWorth();
 }
 
 // ---- Forbidden Money bucket + reconciliation ----
@@ -194,5 +209,5 @@ export async function setCashAppCard(formData: FormData) {
     .from("settings")
     .upsert({ user_id: user.id, cash_app_card_id }, { onConflict: "user_id" });
   if (error) throw error;
-  revalidatePortfolio();
+  revalidateSweep();
 }

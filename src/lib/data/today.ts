@@ -8,9 +8,15 @@ import {
   type DeductionLike,
   type IncomeSourceLike,
 } from "@/lib/today";
-import { listIncomeSources, listDeductions, listPurchasesInRange, findPostedPayPeriod } from "@/lib/data/income";
+import { listIncomeSourcesWithVersions, listDeductions, listPurchasesInRange, findPostedPayPeriod } from "@/lib/data/income";
 import { listRecurringItems, listOccurrencesInRange, listCategories } from "@/lib/data/recurring";
 import { closeElapsedPeriods } from "@/lib/data/close-periods";
+import { listAccounts, listHoldings } from "@/lib/data/accounts";
+import { listAllSnapshots } from "@/lib/data/net-worth-snapshots";
+import { reconciliationStatus } from "@/lib/cards";
+import { buildReviewChecklist, type ReviewItem } from "@/lib/checklist";
+
+const CHECKLIST_LOOKBACK_DAYS = 45;
 
 const DEFAULT_CATEGORY_EMOJI = "💳";
 
@@ -34,15 +40,63 @@ export interface TodaySnapshot {
   spendingByCategory: SpendingCategory[];
   alreadyPosted: boolean;
   primarySource: IncomeSourceLike | null;
+  reviewItems: ReviewItem[];
+}
+
+async function buildTodayReviewChecklist(): Promise<ReviewItem[]> {
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const lookbackStart = new Date();
+  lookbackStart.setDate(lookbackStart.getDate() - CHECKLIST_LOOKBACK_DAYS);
+
+  const [accounts, snapshots, holdings, recentPurchases] = await Promise.all([
+    listAccounts(),
+    listAllSnapshots(),
+    listHoldings(),
+    listPurchasesInRange(lookbackStart.toISOString().slice(0, 10), todayISO),
+  ]);
+
+  const contributedByAccount = new Map<string, number>();
+  for (const s of snapshots) {
+    // Snapshots come back ordered by snapshot_date, so the last write wins.
+    contributedByAccount.set(s.account_id, s.contributed);
+  }
+
+  const accountsWithHoldings = new Set(holdings.map((h) => h.account_id).filter((id): id is string => !!id));
+
+  // Most recent investing-sourced purchase per account — the "likely
+  // trigger" reported alongside a cash-sleeve-under-minimum nudge.
+  const recentInvestingChargeByAccount = new Map<string, number>();
+  for (const p of [...recentPurchases].sort((a, b) => b.spent_on.localeCompare(a.spent_on))) {
+    if (p.payment_source !== "investing" || !p.source_account_id) continue;
+    if (!recentInvestingChargeByAccount.has(p.source_account_id)) {
+      recentInvestingChargeByAccount.set(p.source_account_id, p.amount);
+    }
+  }
+
+  const bufferAccount = accounts.find((a) => a.is_forbidden_money) ?? null;
+  const status = bufferAccount ? reconciliationStatus(bufferAccount) : null;
+
+  return buildReviewChecklist({
+    accounts: accounts.map((a) => ({
+      ...a,
+      hasHoldings: accountsWithHoldings.has(a.id),
+    })),
+    contributedByAccount,
+    recentInvestingChargeByAccount,
+    bufferAccountName: bufferAccount?.name ?? null,
+    bufferShortBy: status?.shortBy ?? 0,
+    todayISO,
+  });
 }
 
 export async function getTodaySnapshot(): Promise<TodaySnapshot> {
   const todayISO = new Date().toISOString().slice(0, 10);
 
-  const [incomeSources, deductions, recurringItems] = await Promise.all([
-    listIncomeSources(),
+  const [incomeSources, deductions, recurringItems, reviewItems] = await Promise.all([
+    listIncomeSourcesWithVersions(),
     listDeductions(),
     listRecurringItems(),
+    buildTodayReviewChecklist(),
   ]);
 
   await closeElapsedPeriods({ incomeSources, deductions, recurringItems });
@@ -65,6 +119,7 @@ export async function getTodaySnapshot(): Promise<TodaySnapshot> {
       spendingByCategory: [],
       alreadyPosted: false,
       primarySource: null,
+      reviewItems,
     };
   }
 
@@ -86,6 +141,7 @@ export async function getTodaySnapshot(): Promise<TodaySnapshot> {
       spendingByCategory: [],
       alreadyPosted: false,
       primarySource,
+      reviewItems,
     };
   }
 
@@ -215,5 +271,6 @@ export async function getTodaySnapshot(): Promise<TodaySnapshot> {
     spendingByCategory,
     alreadyPosted: !!posted,
     primarySource,
+    reviewItems,
   };
 }

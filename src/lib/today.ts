@@ -6,6 +6,11 @@ import {
   type RecurringItemLike,
 } from "@/lib/recurring";
 
+export interface AmountVersion {
+  net_per_check: number;
+  effective_date: string;
+}
+
 export interface IncomeSourceLike {
   id: string;
   net_per_check: number;
@@ -13,6 +18,28 @@ export interface IncomeSourceLike {
   anchor_date: string | null;
   sm_day1: number;
   sm_day2: number;
+  amountVersions?: AmountVersion[];
+}
+
+/**
+ * Effective-dated resolution (brief rev 02 §2.2): a raise never rewrites
+ * the past. Picks the most recent version whose effective_date is on or
+ * before the pay date in question; if every version is still in the
+ * future relative to that date, falls back to the earliest one rather than
+ * leaving a gap.
+ */
+export function resolveIncomeAmount(
+  versions: AmountVersion[] | undefined,
+  payDate: string,
+  fallback: number,
+): number {
+  if (!versions || versions.length === 0) return fallback;
+  const applicable = versions
+    .filter((v) => v.effective_date <= payDate)
+    .sort((a, b) => b.effective_date.localeCompare(a.effective_date));
+  if (applicable.length > 0) return applicable[0].net_per_check;
+  const earliest = [...versions].sort((a, b) => a.effective_date.localeCompare(b.effective_date))[0];
+  return earliest.net_per_check;
 }
 
 export interface DeductionLike {
@@ -87,14 +114,16 @@ export function netIncomeForWindow(
     if (source.freq === "one-off") {
       const date = source.anchor_date;
       if (date && date >= window.start && date <= window.end) {
-        total += source.net_per_check - dedTotal;
+        const amount = resolveIncomeAmount(source.amountVersions, date, source.net_per_check);
+        total += amount - dedTotal;
       }
       continue;
     }
 
     for (const w of windowsAround(source, todayISO)) {
       if (w.payDate >= window.start && w.payDate <= window.end) {
-        total += source.net_per_check - dedTotal;
+        const amount = resolveIncomeAmount(source.amountVersions, w.payDate, source.net_per_check);
+        total += amount - dedTotal;
       }
     }
   }

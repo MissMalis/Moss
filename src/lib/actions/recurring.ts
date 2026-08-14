@@ -32,6 +32,18 @@ export async function createCategory(formData: FormData) {
   revalidate();
 }
 
+export async function updateCategory(formData: FormData) {
+  const { supabase } = await requireUser();
+  const id = String(formData.get("id") ?? "");
+  const name = String(formData.get("name") ?? "").trim();
+  const emoji = String(formData.get("emoji") ?? "").trim() || null;
+  if (!id || !name) throw new Error("Name is required");
+
+  const { error } = await supabase.from("categories").update({ name, emoji }).eq("id", id);
+  if (error) throw error;
+  revalidate();
+}
+
 export async function deleteCategory(formData: FormData) {
   const { supabase } = await requireUser();
   const id = String(formData.get("id") ?? "");

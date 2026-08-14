@@ -43,15 +43,52 @@ export async function createIncomeSource(formData: FormData) {
     throw new Error(freqRaw === "one-off" ? "Pick the date it lands" : "Pick an anchor date");
   }
 
-  const { error } = await supabase.from("income_sources").insert({
+  const { data: source, error } = await supabase
+    .from("income_sources")
+    .insert({
+      user_id: user.id,
+      name,
+      net_per_check,
+      freq: freqRaw,
+      anchor_date,
+      sm_day1,
+      sm_day2,
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+
+  // Seed the first effective-dated version so resolution never has a gap.
+  const { error: versionError } = await supabase.from("income_amount_versions").insert({
     user_id: user.id,
-    name,
+    income_source_id: source.id,
     net_per_check,
-    freq: freqRaw,
-    anchor_date,
-    sm_day1,
-    sm_day2,
+    effective_date: new Date().toISOString().slice(0, 10),
   });
+  if (versionError) throw versionError;
+
+  revalidate();
+}
+
+/**
+ * A raise (or any income change) never rewrites the past (brief rev 02
+ * §2.2) — this inserts a new effective-dated version instead of mutating
+ * the source's amount directly. Only pay windows on/after `effective_date`
+ * resolve to it.
+ */
+export async function addIncomeAmountVersion(formData: FormData) {
+  const { supabase, user } = await requireUser();
+  const income_source_id = String(formData.get("income_source_id") ?? "");
+  const net_per_check = Number(formData.get("net_per_check") ?? 0);
+  const effective_date = String(formData.get("effective_date") ?? "") || new Date().toISOString().slice(0, 10);
+  if (!income_source_id || net_per_check <= 0) {
+    throw new Error("Pick an income source and a positive amount");
+  }
+
+  const { error } = await supabase.from("income_amount_versions").upsert(
+    { user_id: user.id, income_source_id, net_per_check, effective_date },
+    { onConflict: "income_source_id,effective_date" },
+  );
   if (error) throw error;
   revalidate();
 }
@@ -86,6 +123,25 @@ export async function createDeduction(formData: FormData) {
     target_account_key,
     tax_treatment,
   });
+  if (error) throw error;
+  revalidate();
+}
+
+export async function updateDeduction(formData: FormData) {
+  const { supabase } = await requireUser();
+  const id = String(formData.get("id") ?? "");
+  const name = String(formData.get("name") ?? "").trim();
+  const amount = Number(formData.get("amount") ?? 0);
+  const employer_match = Number(formData.get("employer_match") ?? 0);
+  const target_account_key = String(formData.get("target_account_key") ?? "") || null;
+  const tax_treatmentRaw = String(formData.get("tax_treatment") ?? "pre_tax");
+  const tax_treatment = tax_treatmentRaw === "post_tax" ? "post_tax" : "pre_tax";
+  if (!id || !name) throw new Error("Name is required");
+
+  const { error } = await supabase
+    .from("deductions")
+    .update({ name, amount, employer_match, target_account_key, tax_treatment })
+    .eq("id", id);
   if (error) throw error;
   revalidate();
 }
@@ -156,7 +212,7 @@ export async function createPurchase(formData: FormData) {
 
   revalidatePath("/today");
   revalidatePath("/expenses");
-  revalidatePath("/portfolio");
+  revalidatePath("/net-worth");
 }
 
 export async function deletePurchase(formData: FormData) {
@@ -192,7 +248,7 @@ export async function deletePurchase(formData: FormData) {
 
   revalidatePath("/today");
   revalidatePath("/expenses");
-  revalidatePath("/portfolio");
+  revalidatePath("/net-worth");
 }
 
 /** Funding a stored-value account (transit card, gift card...) from checking — the one Safe-to-Spend hit for that balance. */
@@ -230,7 +286,7 @@ export async function loadStoredValue(formData: FormData) {
 
   revalidatePath("/today");
   revalidatePath("/expenses");
-  revalidatePath("/portfolio");
+  revalidatePath("/net-worth");
 }
 
 // ---- Paycheck posting (contributions -> net worth, brief §0.5 / §4) ----
@@ -292,5 +348,5 @@ export async function postPaycheck(formData: FormData) {
   }
 
   revalidatePath("/today");
-  revalidatePath("/portfolio");
+  revalidatePath("/net-worth");
 }

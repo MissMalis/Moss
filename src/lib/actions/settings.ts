@@ -18,10 +18,11 @@ export async function updateSettings(formData: FormData) {
   )
     ? (biz_shiftRaw as "none" | "prior" | "next")
     : "next";
+  const early_pay_days = Math.min(5, Math.max(0, Number(formData.get("early_pay_days") ?? 0) || 0));
 
   const { error } = await supabase
     .from("settings")
-    .upsert({ user_id: user.id, bank, biz_shift }, { onConflict: "user_id" });
+    .upsert({ user_id: user.id, bank, biz_shift, early_pay_days }, { onConflict: "user_id" });
   if (error) throw error;
 
   revalidatePath("/settings");

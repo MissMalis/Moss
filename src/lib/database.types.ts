@@ -23,6 +23,8 @@ export interface Database {
         user_id: string;
         bank: string;
         biz_shift: "none" | "prior" | "next";
+        early_pay_days: number;
+        demo_seeded: boolean;
         cash_app_card_id: string | null;
         gemini_key_set: boolean;
         market_key_set: boolean;
@@ -49,7 +51,11 @@ export interface Database {
         is_forbidden_money: boolean;
         reconciled_balance: number | null;
         apy_pct: number | null;
+        apr_pct: number | null;
         annual_contribution_limit: number | null;
+        icon: string | null;
+        min_cash: number | null;
+        balance_updated_at: string | null;
         created_at: string;
       }>;
       holdings: Row<{
@@ -162,6 +168,7 @@ export interface Database {
         network: string | null;
         color: string;
         base_multiplier: number;
+        icon: string | null;
         created_at: string;
       }>;
       card_category_multipliers: Row<{
@@ -183,6 +190,30 @@ export interface Database {
         swept: boolean;
         swept_at: string | null;
         created_at: string;
+      }>;
+      income_amount_versions: Row<{
+        id: string;
+        user_id: string;
+        income_source_id: string;
+        net_per_check: number;
+        effective_date: string;
+        created_at: string;
+      }>;
+      budgets: Row<{
+        id: string;
+        user_id: string;
+        category: string;
+        cap_amount: number;
+        created_at: string;
+      }>;
+      market_indices: Row<{
+        id: string;
+        user_id: string;
+        symbol: string;
+        label: string;
+        value: number;
+        prev_close: number;
+        updated_at: string;
       }>;
     };
     Views: Record<string, never>;

@@ -457,3 +457,99 @@ alter table purchases add column if not exists source_account_id uuid references
 -- only — Moss warns as you approach the limit, it doesn't enforce it).
 alter table accounts add column if not exists apy_pct numeric(5,3);
 alter table accounts add column if not exists annual_contribution_limit numeric(12,2);
+
+-- §2.2: effective-dated amounts. A raise (or any income change) never
+-- rewrites the past — it inserts a new version taking effect on a chosen
+-- date. Only pay windows on/after that date resolve to the new amount;
+-- closed pay-period snapshots are frozen and never recomputed regardless.
+create table if not exists income_amount_versions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users on delete cascade not null,
+  income_source_id uuid references income_sources on delete cascade not null,
+  net_per_check numeric(12,2) not null,
+  effective_date date not null,
+  created_at timestamptz default now(),
+  unique (income_source_id, effective_date)
+);
+
+alter table income_amount_versions enable row level security;
+drop policy if exists "income_amount_versions_owner" on income_amount_versions;
+create policy "income_amount_versions_owner" on income_amount_versions
+  for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+create index if not exists income_amount_versions_source_idx
+  on income_amount_versions (income_source_id, effective_date);
+
+-- §9: "bank pays me early" — some banks post direct deposit a few days
+-- ahead of the employer's stated payday. Informational/display only (see
+-- expectedPayDate in src/lib/periods.ts) — it does not shift pay-period
+-- window boundaries or bill filing, only the "you'll likely see it on"
+-- date shown to the user.
+alter table settings add column if not exists early_pay_days integer default 0;
+
+-- ============================================================
+-- Moss — Revision 03
+-- ============================================================
+
+-- §0: an explicit seeded flag, not an "is anything empty" guess — so
+-- re-seeding intent is unambiguous and a partially-wiped state doesn't get
+-- stuck looking permanently blank (Today re-seeds automatically if this is
+-- true but income_sources comes back empty).
+alter table settings add column if not exists demo_seeded boolean default false;
+
+-- §6: custom icons on anything with a name. Falls back to the type-based
+-- default emoji (accountEmoji()) when null — never prefilled.
+alter table accounts add column if not exists icon text;
+alter table cards add column if not exists icon text;
+
+-- §3: liabilities get their own APR field (separate from apy_pct, which is
+-- earned-interest framing for HYSA — a liability's rate costs you, it
+-- doesn't pay you).
+alter table accounts add column if not exists apr_pct numeric(5,3);
+
+-- §4: Budgets — optional per-category spending caps that layer on top of
+-- Safe to Spend. Keyed by category NAME (text), matching how purchases.category
+-- and the "Where it goes" aggregation already key by name rather than id.
+create table if not exists budgets (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users on delete cascade not null,
+  category text not null,
+  cap_amount numeric(12,2) not null,
+  created_at timestamptz default now(),
+  unique (user_id, category)
+);
+
+alter table budgets enable row level security;
+drop policy if exists "budgets_owner" on budgets;
+create policy "budgets_owner" on budgets
+  for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- §2.1: hardcoded-plausible-for-demo, real-refresh-later ticker values for
+-- the Today market strip (S&P/Nasdaq/Dow). Live index refresh is a follow-up
+-- (true real-time costs money; even a delayed feed needs a provider that
+-- serves index symbols, which free-tier Finnhub doesn't) — for now this
+-- table is populated by the demo seed and is otherwise just a display read.
+create table if not exists market_indices (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users on delete cascade not null,
+  symbol text not null,
+  label text not null,
+  value numeric(12,2) not null,
+  prev_close numeric(12,2) not null,
+  updated_at timestamptz default now(),
+  unique (user_id, symbol)
+);
+
+alter table market_indices enable row level security;
+drop policy if exists "market_indices_owner" on market_indices;
+create policy "market_indices_owner" on market_indices
+  for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- §0/§6: two fields the "Needs review" checklist needs that weren't
+-- trackable before. min_cash is a per-account "don't let the cash sleeve
+-- drop below this" line (mainly HSA — dipping under it is what usually
+-- means the custodian auto-sold something to cover a charge). balance_updated_at
+-- tracks when a lump (no-holdings) investable account's balance was last
+-- hand-refreshed, so Moss can nudge you to update it.
+alter table accounts add column if not exists min_cash numeric(12,2);
+alter table accounts add column if not exists balance_updated_at timestamptz default now();

@@ -11,3 +11,15 @@ export async function listClosedPayPeriods() {
   if (error) throw error;
   return data;
 }
+
+/** Pay dates in the last little while, for Today's "Recent" feed — income rows show up alongside spending. */
+export async function listRecentPayPeriods(sinceISO: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("pay_periods")
+    .select("*")
+    .gte("pay_date", sinceISO)
+    .order("pay_date", { ascending: false });
+  if (error) throw error;
+  return data;
+}

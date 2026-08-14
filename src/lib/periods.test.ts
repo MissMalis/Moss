@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { occurrenceInWindow, periodsForMonth, safeToSpend } from "./periods";
+import {
+  expectedPayDate,
+  occurrenceInWindow,
+  periodsForMonth,
+  safeToSpend,
+  shiftEarlyPay,
+  shiftForWeekend,
+} from "./periods";
 
 describe("periodsForMonth", () => {
   it("splits a 31-day month at [1,16] with P2 ending on the 31st", () => {
@@ -121,5 +128,32 @@ describe("safeToSpend", () => {
       loggedPurchases: 0,
     });
     expect(withoutReserve - withReserve).toBe(400);
+  });
+});
+
+describe("shiftEarlyPay (rev 02 §9)", () => {
+  it("moves the date earlier by the configured number of days", () => {
+    expect(shiftEarlyPay("2026-01-17", 2)).toBe("2026-01-15");
+  });
+
+  it("is a no-op when no early-pay offset is configured", () => {
+    expect(shiftEarlyPay("2026-01-17", 0)).toBe("2026-01-17");
+  });
+});
+
+describe("expectedPayDate (rev 02 §9: early-pay offset applied before the business-day shift)", () => {
+  it("applies the early-pay offset first, then nudges off a weekend it lands on", () => {
+    // 2026-01-18 is a Sunday; pulling 1 day early lands on Saturday 1/17,
+    // which then needs its own weekend shift forward to Monday 1/19.
+    expect(expectedPayDate("2026-01-18", 1, "next")).toBe("2026-01-19");
+  });
+
+  it("with no early-pay offset, behaves exactly like shiftForWeekend alone", () => {
+    expect(expectedPayDate("2026-01-17", 0, "next")).toBe(shiftForWeekend("2026-01-17", "next"));
+  });
+
+  it("with no weekend involved, only the early-pay offset applies", () => {
+    // 2026-01-01 is a Thursday; 1 day early is Wednesday 2025-12-31, a weekday.
+    expect(expectedPayDate("2026-01-01", 1, "next")).toBe("2025-12-31");
   });
 });

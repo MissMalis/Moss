@@ -2,12 +2,12 @@ import { createClient } from "@/lib/supabase/server";
 import { safeToSpend } from "@/lib/periods";
 import { buildOccurrencesForWindow, sumEarmarked } from "@/lib/recurring";
 import { computeAutoReserve, netIncomeForWindow, windowsAround } from "@/lib/today";
-import { listIncomeSources, listDeductions, listPurchasesInRange } from "@/lib/data/income";
+import { listIncomeSourcesWithVersions, listDeductions, listPurchasesInRange } from "@/lib/data/income";
 import { listRecurringItems, listOccurrencesInRange } from "@/lib/data/recurring";
 
 const LOOKBACK_MONTHS = 6;
 
-type IncomeSources = Awaited<ReturnType<typeof listIncomeSources>>;
+type IncomeSources = Awaited<ReturnType<typeof listIncomeSourcesWithVersions>>;
 type Deductions = Awaited<ReturnType<typeof listDeductions>>;
 type RecurringItems = Awaited<ReturnType<typeof listRecurringItems>>;
 
@@ -38,7 +38,7 @@ export async function closeElapsedPeriods(preloaded?: {
 
   const [incomeSources, deductions, recurringItems] = preloaded
     ? [preloaded.incomeSources, preloaded.deductions, preloaded.recurringItems]
-    : await Promise.all([listIncomeSources(), listDeductions(), listRecurringItems()]);
+    : await Promise.all([listIncomeSourcesWithVersions(), listDeductions(), listRecurringItems()]);
 
   const primarySource = incomeSources.find((s) => s.freq !== "one-off");
   if (!primarySource) return;

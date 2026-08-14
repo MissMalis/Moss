@@ -19,6 +19,8 @@ export async function getSettings() {
       user_id: user.id,
       bank: "Generic",
       biz_shift: "next" as const,
+      early_pay_days: 0,
+      demo_seeded: false,
       cash_app_card_id: null,
       gemini_key_set: false,
       market_key_set: false,

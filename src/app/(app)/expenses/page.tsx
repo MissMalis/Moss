@@ -4,9 +4,12 @@ import { listIncomeSources, listDeductions, listPurchasesInRange } from "@/lib/d
 import { listAccounts } from "@/lib/data/accounts";
 import { deletePurchase, loadStoredValue } from "@/lib/actions/income";
 import { LogExpenseForm } from "@/components/LogExpenseForm";
+import { EmojiPicker } from "@/components/EmojiPicker";
+import { AddButton } from "@/components/AddButton";
 import { buildOccurrencesForWindow, sumEarmarked } from "@/lib/recurring";
 import {
   createCategory,
+  updateCategory,
   deleteCategory,
   createRecurringItem,
   updateRecurringItem,
@@ -308,9 +311,8 @@ export default async function ExpensesPage() {
           </div>
         )}
 
-        <details className="mt-4 rounded-xl border border-border bg-card p-5">
-          <summary className="cursor-pointer text-[13px] text-ink-2">Add a bill</summary>
-          <form action={createRecurringItem} className="mt-3 flex flex-wrap items-end gap-3">
+        <AddButton label="Add a bill">
+          <form action={createRecurringItem} className="flex flex-wrap items-end gap-3">
             <label className={LABEL}>
               Name
               <input name="name" required className={INPUT} />
@@ -344,32 +346,39 @@ export default async function ExpensesPage() {
               Add a bill
             </button>
           </form>
-        </details>
+        </AddButton>
       </section>
 
       <section>
         <h2 className="mb-3 font-display text-[22px] font-medium text-ink">Categories</h2>
         <div className="flex flex-wrap gap-2">
           {categories.map((c) => (
-            <form key={c.id} action={deleteCategory} className="flex items-center gap-1">
-              <input type="hidden" name="id" value={c.id} />
-              <span className="rounded-full border border-border px-3 py-1 text-[13px] text-ink-2">
-                {c.emoji && <span className="mr-1">{c.emoji}</span>}
+            <details key={c.id} className="group relative">
+              <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-full border border-border px-3 py-1 text-[13px] text-ink-2 hover:border-border-strong">
+                {c.emoji && <span>{c.emoji}</span>}
                 {c.name}
-              </span>
-              <button type="submit" className="text-[12px] text-ink-3 hover:text-ink">
-                ×
-              </button>
-            </form>
+              </summary>
+              <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-lg border border-border bg-card p-3 shadow-none">
+                <form action={updateCategory} className="flex items-center gap-2">
+                  <input type="hidden" name="id" value={c.id} />
+                  <EmojiPicker name="emoji" defaultValue={c.emoji} />
+                  <input name="name" defaultValue={c.name} className={`min-w-0 flex-1 ${INPUT}`} />
+                  <button type="submit" className={LINK_QUIET}>
+                    Save
+                  </button>
+                </form>
+                <form action={deleteCategory} className="mt-2">
+                  <input type="hidden" name="id" value={c.id} />
+                  <button type="submit" className={LINK_QUIET}>
+                    Remove
+                  </button>
+                </form>
+              </div>
+            </details>
           ))}
         </div>
         <form action={createCategory} className="mt-3 flex items-end gap-2">
-          <input
-            name="emoji"
-            placeholder="🍔"
-            maxLength={4}
-            className={`w-14 text-center ${INPUT}`}
-          />
+          <EmojiPicker name="emoji" />
           <input name="name" placeholder="New category" required className={INPUT} />
           <button type="submit" className={BTN_SOLID}>
             Add category

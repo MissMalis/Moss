@@ -13,6 +13,12 @@ export const BTN_GHOST =
 export const BTN_DASHED =
   "rounded-lg border border-dashed border-border-strong px-3.5 py-1.5 text-[14px] font-medium text-ink-2 transition hover:border-ink-3 hover:text-ink";
 
+// The one deliberately-accented button style (rev 03 §6 "key buttons") —
+// used sparingly: Today's primary paycheck action, "Add budget", "Load demo
+// data". Everything else stays BTN_SOLID (ink).
+export const BTN_MOSS =
+  "rounded-lg bg-moss px-3.5 py-1.5 text-[14px] font-medium text-bg transition hover:opacity-85 disabled:opacity-50";
+
 export const LINK_QUIET = "text-[13px] text-ink-3 transition hover:text-ink";
 export const LINK_QUIET_UNDERLINE = "text-[13px] text-ink-2 underline decoration-border-strong underline-offset-2 transition hover:text-ink hover:decoration-ink-3";
 

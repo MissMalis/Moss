@@ -1,5 +1,7 @@
 import { getSettings } from "@/lib/data/settings";
 import { updateSettings, saveApiKey, removeApiKey } from "@/lib/actions/settings";
+import { seedDemoData } from "@/lib/actions/demo";
+import { ClearDataButton } from "@/components/ClearDataButton";
 import { Tooltip } from "@/components/Tooltip";
 import { BTN_GHOST, BTN_SOLID, CARD, INPUT, LABEL, LINK_QUIET } from "@/lib/ui";
 
@@ -27,8 +29,27 @@ export default async function SettingsPage() {
 
           <label className={LABEL}>
             <span className="flex items-center gap-1">
+              Bank pays me early
+              <Tooltip text="Some banks post direct deposit a few days before the official payday. This only changes the date Moss expects to see it land — it doesn't move bill due-dates or Safe to spend math." />
+            </span>
+            <select
+              name="early_pay_days"
+              defaultValue={settings.early_pay_days}
+              className={`max-w-xs ${INPUT}`}
+            >
+              <option value={0}>Right on payday</option>
+              <option value={1}>1 day early</option>
+              <option value={2}>2 days early</option>
+              <option value={3}>3 days early</option>
+              <option value={4}>4 days early</option>
+              <option value={5}>5 days early</option>
+            </select>
+          </label>
+
+          <label className={LABEL}>
+            <span className="flex items-center gap-1">
               Business-day rule
-              <Tooltip text="If a bill or payday lands on a weekend, shift it to the nearest banking day instead. True bank-holiday calendars aren't machine-readable yet, so this only accounts for weekends." />
+              <Tooltip text="If a bill or payday lands on a weekend, shift it to the nearest banking day instead. True bank-holiday calendars aren't machine-readable yet, so this only accounts for weekends. Applied after the early-pay offset above." />
             </span>
             <select name="biz_shift" defaultValue={settings.biz_shift} className={`max-w-xs ${INPUT}`}>
               <option value="none">Don&apos;t shift</option>
@@ -65,6 +86,23 @@ export default async function SettingsPage() {
             connected={settings.gemini_key_set}
             hint="Powers the Ask Moss advisor."
           />
+        </div>
+      </section>
+
+      <section>
+        <h2 className="font-display text-[22px] font-medium text-ink">Demo data</h2>
+        <p className="mt-1 text-[13px] text-ink-2">
+          Fill every tab with realistic sample accounts, bills, and history to see how Moss
+          looks in use, or wipe everything to start with your own numbers. Loading always fully
+          replaces whatever&apos;s there — it&apos;s not additive.
+        </p>
+        <div className={`mt-4 flex items-center gap-3 ${CARD}`}>
+          <form action={seedDemoData}>
+            <button type="submit" className={BTN_SOLID}>
+              Load demo data
+            </button>
+          </form>
+          <ClearDataButton />
         </div>
       </section>
     </div>

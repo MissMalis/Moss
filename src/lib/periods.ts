@@ -145,3 +145,21 @@ export function shiftForWeekend(dateISO: string, mode: BizShift): string {
   }
   return d.toISOString().slice(0, 10);
 }
+
+// §9: some banks post direct deposit a few days ahead of the employer's
+// stated payday. Display-only — the pay-period window itself (which bills
+// file into it) still runs off the nominal payDate; this only answers
+// "when will I likely actually see it."
+export function shiftEarlyPay(dateISO: string, earlyPayDays: number): string {
+  if (!earlyPayDays) return dateISO;
+  const d = new Date(dateISO + "T00:00:00");
+  d.setDate(d.getDate() - earlyPayDays);
+  return d.toISOString().slice(0, 10);
+}
+
+// Composes the two: the early-pay offset is applied first, then the result
+// is nudged off a weekend by the business-day rule — matching the order
+// called out in the brief (§9: "applied before the business-day shift").
+export function expectedPayDate(payDateISO: string, earlyPayDays: number, bizShift: BizShift): string {
+  return shiftForWeekend(shiftEarlyPay(payDateISO, earlyPayDays), bizShift);
+}

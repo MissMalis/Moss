@@ -20,6 +20,14 @@
 
   /* Growth-graph specific: pale-blue "contributed" line + fill. */
   --color-contributed: #8fb8e0;
+
+  /* Rev 03 §6: whisper-light moss-olive accent — active states, key buttons,
+     positive numbers, the Safe-to-Spend hero, today-highlights. Never used
+     for data-viz (the ring's candy palette and the graph's green/blue are
+     untouched). */
+  --color-moss: #3b5417;
+  --color-moss-2: #566907;
+  --color-moss-bg: #eef1e3;
 }
 
 @theme inline {
@@ -38,6 +46,9 @@
   --color-hold: var(--color-hold);
   --color-hold-bg: var(--color-hold-bg);
   --color-contributed: var(--color-contributed);
+  --color-moss: var(--color-moss);
+  --color-moss-2: var(--color-moss-2);
+  --color-moss-bg: var(--color-moss-bg);
 
   /* Sans-first, everywhere — no serif. "Display" is just a tighter-tracked
      sans reserved for headings and money figures. */

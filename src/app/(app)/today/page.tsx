@@ -1,12 +1,19 @@
 import Link from "next/link";
 import { getTodaySnapshot } from "@/lib/data/today";
-import { createPurchase, postPaycheck } from "@/lib/actions/income";
+import { getTodayExtras } from "@/lib/data/today-extras";
+import { getSettings } from "@/lib/data/settings";
+import { postPaycheck } from "@/lib/actions/income";
+import { expectedPayDate } from "@/lib/periods";
+import { daysUntil, dollarsPerDay } from "@/lib/spend-pace";
 import { formatDateRange, formatMoney, formatShortDateLabel } from "@/lib/format";
 import { Money } from "@/components/Money";
 import { Tooltip } from "@/components/Tooltip";
-import { SpendingRing } from "@/components/SpendingRing";
 import { EmptyState } from "@/components/EmptyState";
-import { BTN_SOLID, CARD, INPUT, LABEL, LINK_QUIET, PILL_HOLD } from "@/lib/ui";
+import { TickerBar } from "@/components/TickerBar";
+import { NetWorthHero } from "@/components/NetWorthHero";
+import { RecentList } from "@/components/RecentList";
+import { UpcomingStrip } from "@/components/UpcomingStrip";
+import { BTN_SOLID, CARD, LINK_QUIET, PILL_HOLD } from "@/lib/ui";
 
 function greeting() {
   const hour = new Date().getHours();
@@ -16,7 +23,10 @@ function greeting() {
 }
 
 export default async function TodayPage() {
-  const snap = await getTodaySnapshot();
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const [snap, settings] = await Promise.all([getTodaySnapshot(), getSettings()]);
+  const extras = await getTodayExtras(todayISO);
+  const { netWorth, assetsCount, liabilitiesCount, historyPoints, indices, recentGroups, upcomingWeek } = extras;
 
   if (!snap.hasPrimaryIncome) {
     return (
@@ -47,24 +57,79 @@ export default async function TodayPage() {
     purchasesTotal,
     safeToSpend,
     earmarkedItems,
-    spendingByCategory,
+    reviewItems,
   } = snap;
+
+  const daysLeft = daysUntil(todayISO, window.end);
+  const perDay = dollarsPerDay(safeToSpend, daysLeft);
+  const periodBudget = safeToSpend + purchasesTotal;
+  const spentPct = periodBudget > 0 ? Math.min(100, (purchasesTotal / periodBudget) * 100) : 0;
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-[13px] text-ink-2">{greeting()}</p>
-          <p className="text-[12.5px] text-ink-3">{formatDateRange(window.start, window.end)}</p>
-        </div>
-        <span className="text-ink-3" aria-hidden>
-          🔔
-        </span>
+      <div>
+        <p className="text-[13px] text-ink-2">{greeting()}</p>
+        <p className="text-[12.5px] text-ink-3">{formatDateRange(window.start, window.end)}</p>
       </div>
+
+      <TickerBar indices={indices} />
+
+      {reviewItems.length > 0 && (
+        <section>
+          <h2 className="mb-3 font-display text-[22px] font-medium text-ink">Needs review</h2>
+          <div className="space-y-1.5">
+            {reviewItems.map((r) => (
+              <Link
+                key={r.id}
+                href={r.href}
+                className="flex items-center justify-between rounded-lg border border-hold/30 bg-hold-bg px-3 py-2 text-[13.5px] text-ink hover:border-hold/50"
+              >
+                <span className="flex items-center gap-2">
+                  <span aria-hidden>{r.emoji}</span>
+                  {r.message}
+                </span>
+                <span className="text-hold">{r.actionLabel} →</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className={CARD}>
+          <p className="text-[12.5px] text-ink-2">Assets</p>
+          <Money value={netWorth.byType && Object.entries(netWorth.byType).filter(([t]) => t !== "Liabilities").reduce((s, [, v]) => s + v, 0)} size="stat" />
+          <p className="mt-1 text-[12px] text-ink-3">
+            {assetsCount} account{assetsCount === 1 ? "" : "s"}
+          </p>
+        </div>
+        <div className={CARD}>
+          <p className="text-[12.5px] text-ink-2">Liabilities</p>
+          <Money value={Math.abs(netWorth.byType?.["Liabilities"] ?? 0)} size="stat" />
+          <p className="mt-1 text-[12px] text-ink-3">
+            {liabilitiesCount} debt{liabilitiesCount === 1 ? "" : "s"}
+          </p>
+        </div>
+      </div>
+
+      <NetWorthHero total={netWorth.total} points={historyPoints} />
 
       <section>
         <p className="text-[13px] text-ink-2">💸 Safe to spend</p>
-        <Money value={safeToSpend} size="hero" />
+        <Money value={safeToSpend} size="hero" className="text-moss" />
+
+        <div className={`mt-3 inline-flex items-center gap-1.5 rounded-full bg-moss-bg px-3 py-1.5 text-[13px] font-medium text-moss`}>
+          {formatMoney(perDay)}/day · {daysLeft} day{daysLeft === 1 ? "" : "s"} left
+        </div>
+
+        <div className="mt-4">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-card-soft">
+            <div className="h-full rounded-full bg-moss" style={{ width: `${spentPct}%` }} />
+          </div>
+          <p className="mt-1.5 text-[12.5px] text-ink-3">
+            {formatMoney(purchasesTotal)} spent of {formatMoney(periodBudget)} for this period
+          </p>
+        </div>
 
         {autoReserve.reserve > 0 && (
           <div className={`mt-3 ${PILL_HOLD}`}>
@@ -119,33 +184,27 @@ export default async function TodayPage() {
         )}
 
         {!snap.alreadyPosted && (
-          <form action={postPaycheck} className="mt-4">
-            <input type="hidden" name="income_source_id" value={snap.primarySource!.id} />
-            <input type="hidden" name="pay_date" value={window.payDate} />
-            <input type="hidden" name="window_start" value={window.start} />
-            <input type="hidden" name="window_end" value={window.end} />
-            <input type="hidden" name="net_income" value={income} />
-            <button type="submit" className={BTN_SOLID}>
-              Mark {formatShortDateLabel(window.payDate)} posted
-            </button>
-          </form>
-        )}
-      </section>
-
-      <section className={CARD}>
-        <p className="flex items-center gap-1 text-[12.5px] text-ink-2">
-          Rollover in
-          <Tooltip text="Whatever was left over from your last pay period, carried into this one." />
-        </p>
-        <Money value={rollover} size="stat" />
-      </section>
-
-      <section>
-        <h2 className="mb-3 font-display text-[22px] font-medium text-ink">Where it goes</h2>
-        {spendingByCategory.length === 0 ? (
-          <EmptyState emoji="🍃" title="Nothing spent yet this period" />
-        ) : (
-          <SpendingRing data={spendingByCategory} />
+          <>
+            <form action={postPaycheck} className="mt-4">
+              <input type="hidden" name="income_source_id" value={snap.primarySource!.id} />
+              <input type="hidden" name="pay_date" value={window.payDate} />
+              <input type="hidden" name="window_start" value={window.start} />
+              <input type="hidden" name="window_end" value={window.end} />
+              <input type="hidden" name="net_income" value={income} />
+              <button type="submit" className={BTN_SOLID}>
+                Mark {formatShortDateLabel(window.payDate)} posted
+              </button>
+            </form>
+            {(() => {
+              const expected = expectedPayDate(window.payDate, settings.early_pay_days, settings.biz_shift);
+              return expected !== window.payDate ? (
+                <p className="mt-2 flex items-center gap-1 text-[12.5px] text-ink-3">
+                  Your bank will likely show it on {formatShortDateLabel(expected)}
+                  <Tooltip text="Based on your early-pay and business-day settings — the pay-period window itself still runs off the official payday." />
+                </p>
+              ) : null;
+            })()}
+          </>
         )}
       </section>
 
@@ -181,29 +240,31 @@ export default async function TodayPage() {
         )}
       </section>
 
-      <section>
-        <h2 className="mb-3 font-display text-[22px] font-medium text-ink">
-          Quick log{" "}
-          <Link href="/expenses" className={`${LINK_QUIET} ml-1`}>
-            Full history →
-          </Link>
-        </h2>
-        <form action={createPurchase} className="flex flex-wrap items-end gap-3">
-          <label className={LABEL}>
-            What
-            <input name="name" required placeholder="Coffee" className={INPUT} />
-          </label>
-          <label className={LABEL}>
-            Amount
-            <input type="number" step="0.01" name="amount" required className={`w-28 ${INPUT}`} />
-          </label>
-          <input type="hidden" name="spent_on" value={new Date().toISOString().slice(0, 10)} />
-          <input type="hidden" name="category" value="Play" />
-          <button type="submit" className={BTN_SOLID}>
-            Log it
-          </button>
-        </form>
-      </section>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <section>
+          <h2 className="mb-3 font-display text-[22px] font-medium text-ink">
+            Recent{" "}
+            <Link href="/expenses" className={`${LINK_QUIET} ml-1`}>
+              See all →
+            </Link>
+          </h2>
+          {recentGroups.length === 0 ? (
+            <EmptyState emoji="🧾" title="Nothing logged recently" />
+          ) : (
+            <RecentList groups={recentGroups} />
+          )}
+        </section>
+
+        <section>
+          <h2 className="mb-3 font-display text-[22px] font-medium text-ink">
+            Upcoming{" "}
+            <Link href="/expenses" className={`${LINK_QUIET} ml-1`}>
+              See all →
+            </Link>
+          </h2>
+          <UpcomingStrip days={upcomingWeek} />
+        </section>
+      </div>
     </div>
   );
 }

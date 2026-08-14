@@ -4,6 +4,7 @@ import {
   findCurrentWindow,
   findFutureWindows,
   netIncomeForWindow,
+  resolveIncomeAmount,
   windowsAround,
 } from "./today";
 
@@ -99,6 +100,42 @@ describe("netIncomeForWindow", () => {
       sm_day2: 16,
     };
     expect(windowsAround(oneOff, "2026-01-10")).toEqual([]);
+  });
+});
+
+describe("resolveIncomeAmount (effective-dated raises, rev 02 §2.2)", () => {
+  const versions = [
+    { net_per_check: 2000, effective_date: "2026-01-01" },
+    { net_per_check: 2200, effective_date: "2026-03-01" },
+  ];
+
+  it("uses the version effective on or before the pay date", () => {
+    expect(resolveIncomeAmount(versions, "2026-02-15", 0)).toBe(2000);
+    expect(resolveIncomeAmount(versions, "2026-03-01", 0)).toBe(2200);
+    expect(resolveIncomeAmount(versions, "2026-06-01", 0)).toBe(2200);
+  });
+
+  it("falls back to the earliest version for a pay date before all of them", () => {
+    expect(resolveIncomeAmount(versions, "2025-12-01", 999)).toBe(2000);
+  });
+
+  it("falls back to the given default with no versions at all", () => {
+    expect(resolveIncomeAmount(undefined, "2026-01-01", 1500)).toBe(1500);
+    expect(resolveIncomeAmount([], "2026-01-01", 1500)).toBe(1500);
+  });
+
+  it("a raise applies to future windows but never rewrites a past one (via netIncomeForWindow)", () => {
+    const raised = {
+      ...biweekly,
+      amountVersions: [
+        { net_per_check: 2000, effective_date: "2026-01-01" },
+        { net_per_check: 2500, effective_date: "2026-02-01" },
+      ],
+    };
+    const before = netIncomeForWindow([raised], [], { start: "2026-01-02", end: "2026-01-15" }, "2026-01-10");
+    const after = netIncomeForWindow([raised], [], { start: "2026-02-13", end: "2026-02-26" }, "2026-02-10");
+    expect(before).toBe(2000);
+    expect(after).toBe(2500);
   });
 });
 
