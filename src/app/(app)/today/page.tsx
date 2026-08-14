@@ -11,9 +11,10 @@ import { Tooltip } from "@/components/Tooltip";
 import { EmptyState } from "@/components/EmptyState";
 import { TickerBar } from "@/components/TickerBar";
 import { NetWorthHero } from "@/components/NetWorthHero";
+import { AlertsCard } from "@/components/AlertsCard";
 import { RecentList } from "@/components/RecentList";
 import { UpcomingStrip } from "@/components/UpcomingStrip";
-import { BTN_SOLID, CARD, LINK_QUIET, PILL_HOLD } from "@/lib/ui";
+import { BTN_MOSS, CARD, CARD_HEADER, LINK_QUIET, PILL_HOLD, SCROLL_LIST } from "@/lib/ui";
 
 function greeting() {
   const hour = new Date().getHours();
@@ -26,7 +27,7 @@ export default async function TodayPage() {
   const todayISO = new Date().toISOString().slice(0, 10);
   const [snap, settings] = await Promise.all([getTodaySnapshot(), getSettings()]);
   const extras = await getTodayExtras(todayISO);
-  const { netWorth, assetsCount, liabilitiesCount, historyPoints, indices, recentGroups, upcomingWeek } = extras;
+  const { netWorth, historyPoints, indices, recentGroups, upcomingWeek } = extras;
 
   if (!snap.hasPrimaryIncome) {
     return (
@@ -66,59 +67,24 @@ export default async function TodayPage() {
   const spentPct = periodBudget > 0 ? Math.min(100, (purchasesTotal / periodBudget) * 100) : 0;
 
   return (
-    <div className="space-y-8">
-      <div>
-        <p className="text-[13px] text-ink-2">{greeting()}</p>
-        <p className="text-[12.5px] text-ink-3">{formatDateRange(window.start, window.end)}</p>
-      </div>
-
+    <div className="space-y-6">
       <TickerBar indices={indices} />
 
-      {reviewItems.length > 0 && (
-        <section>
-          <h2 className="mb-3 font-display text-[22px] font-medium text-ink">Needs review</h2>
-          <div className="space-y-1.5">
-            {reviewItems.map((r) => (
-              <Link
-                key={r.id}
-                href={r.href}
-                className="flex items-center justify-between rounded-lg border border-hold/30 bg-hold-bg px-3 py-2 text-[13.5px] text-ink hover:border-hold/50"
-              >
-                <span className="flex items-center gap-2">
-                  <span aria-hidden>{r.emoji}</span>
-                  {r.message}
-                </span>
-                <span className="text-hold">{r.actionLabel} →</span>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
-
-      <div className="grid grid-cols-2 gap-3">
-        <div className={CARD}>
-          <p className="text-[12.5px] text-ink-2">Assets</p>
-          <Money value={netWorth.byType && Object.entries(netWorth.byType).filter(([t]) => t !== "Liabilities").reduce((s, [, v]) => s + v, 0)} size="stat" />
-          <p className="mt-1 text-[12px] text-ink-3">
-            {assetsCount} account{assetsCount === 1 ? "" : "s"}
-          </p>
-        </div>
-        <div className={CARD}>
-          <p className="text-[12.5px] text-ink-2">Liabilities</p>
-          <Money value={Math.abs(netWorth.byType?.["Liabilities"] ?? 0)} size="stat" />
-          <p className="mt-1 text-[12px] text-ink-3">
-            {liabilitiesCount} debt{liabilitiesCount === 1 ? "" : "s"}
-          </p>
-        </div>
+      <div>
+        <p className="text-[20px] text-ink">{greeting()}</p>
+        <p className="text-[14px] text-ink-2">{formatDateRange(window.start, window.end)}</p>
       </div>
 
-      <NetWorthHero total={netWorth.total} points={historyPoints} />
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.7fr_1fr]">
+        <NetWorthHero total={netWorth.total} points={historyPoints} />
+        <AlertsCard items={reviewItems} />
+      </div>
 
-      <section>
-        <p className="text-[13px] text-ink-2">💸 Safe to spend</p>
+      <section className={CARD}>
+        <p className={CARD_HEADER}>Safe to spend</p>
         <Money value={safeToSpend} size="hero" className="text-moss" />
 
-        <div className={`mt-3 inline-flex items-center gap-1.5 rounded-full bg-moss-bg px-3 py-1.5 text-[13px] font-medium text-moss`}>
+        <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-moss-bg px-3 py-1.5 text-[13px] font-medium text-moss">
           {formatMoney(perDay)}/day · {daysLeft} day{daysLeft === 1 ? "" : "s"} left
         </div>
 
@@ -142,7 +108,7 @@ export default async function TodayPage() {
           <summary className="cursor-pointer text-[13px] text-ink-3 hover:text-ink-2">
             Show the math
           </summary>
-          <div className={`mt-3 space-y-1.5 text-[14px] ${CARD}`}>
+          <div className="mt-3 space-y-1.5 rounded-lg border border-border bg-card-soft p-4 text-[14px]">
             <div className="flex justify-between">
               <span className="text-ink-2">Income</span>
               <span className="text-ink tabular-nums">{formatMoney(income)}</span>
@@ -191,8 +157,8 @@ export default async function TodayPage() {
               <input type="hidden" name="window_start" value={window.start} />
               <input type="hidden" name="window_end" value={window.end} />
               <input type="hidden" name="net_income" value={income} />
-              <button type="submit" className={BTN_SOLID}>
-                Mark {formatShortDateLabel(window.payDate)} posted
+              <button type="submit" className={BTN_MOSS}>
+                Confirm {formatShortDateLabel(window.payDate)} paycheck
               </button>
             </form>
             {(() => {
@@ -208,61 +174,65 @@ export default async function TodayPage() {
         )}
       </section>
 
-      <section>
-        <h2 className="mb-3 font-display text-[22px] font-medium text-ink">
-          Earmarked this period{" "}
-          <Link href="/expenses" className={`${LINK_QUIET} ml-1`}>
-            Manage →
-          </Link>
-        </h2>
-        {earmarkedItems.length === 0 ? (
-          <EmptyState emoji="🧾" title="Nothing earmarked this period" />
-        ) : (
-          <div className="space-y-1.5">
-            {earmarkedItems
-              .slice()
-              .sort((a, b) => a.occDate.localeCompare(b.occDate))
-              .map((o) => (
-                <div
-                  key={`${o.item.id}|${o.occDate}`}
-                  className={`flex items-center justify-between rounded-lg px-3 py-2 text-[13.5px] ${o.skipped ? "opacity-50" : ""}`}
-                >
-                  <span className="text-ink-2">
-                    {o.item.name} <span className="text-ink-3">· {formatShortDateLabel(o.occDate)}</span>
-                  </span>
-                  <span className={o.posted ? "text-good" : "text-ink"}>
-                    {formatMoney(o.amount)}
-                    {o.skipped && " (skipped)"}
-                  </span>
-                </div>
-              ))}
-          </div>
-        )}
-      </section>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <section>
-          <h2 className="mb-3 font-display text-[22px] font-medium text-ink">
-            Recent{" "}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <section className={`${CARD} flex h-full flex-col`}>
+          <p className={CARD_HEADER}>
+            Recent transactions{" "}
             <Link href="/expenses" className={`${LINK_QUIET} ml-1`}>
               See all →
             </Link>
-          </h2>
+          </p>
           {recentGroups.length === 0 ? (
-            <EmptyState emoji="🧾" title="Nothing logged recently" />
+            <p className="mt-3 text-[13px] text-ink-3">Nothing logged recently.</p>
           ) : (
-            <RecentList groups={recentGroups} />
+            <div className={`mt-3 flex-1 ${SCROLL_LIST}`}>
+              <RecentList groups={recentGroups} />
+            </div>
           )}
         </section>
 
-        <section>
-          <h2 className="mb-3 font-display text-[22px] font-medium text-ink">
+        <section className={`${CARD} flex h-full flex-col`}>
+          <p className={CARD_HEADER}>
             Upcoming{" "}
             <Link href="/expenses" className={`${LINK_QUIET} ml-1`}>
               See all →
             </Link>
-          </h2>
-          <UpcomingStrip days={upcomingWeek} />
+          </p>
+          <div className="mt-3 flex-1">
+            <UpcomingStrip days={upcomingWeek} />
+          </div>
+        </section>
+
+        <section className={`${CARD} flex h-full flex-col`}>
+          <p className={CARD_HEADER}>
+            Earmarked this period{" "}
+            <Link href="/expenses" className={`${LINK_QUIET} ml-1`}>
+              Manage →
+            </Link>
+          </p>
+          {earmarkedItems.length === 0 ? (
+            <p className="mt-3 text-[13px] text-ink-3">Nothing earmarked this period.</p>
+          ) : (
+            <div className={`mt-3 flex-1 space-y-1 ${SCROLL_LIST}`}>
+              {earmarkedItems
+                .slice()
+                .sort((a, b) => a.occDate.localeCompare(b.occDate))
+                .map((o) => (
+                  <div
+                    key={`${o.item.id}|${o.occDate}`}
+                    className={`flex items-center justify-between rounded-lg px-2 py-1.5 text-[13px] ${o.skipped ? "opacity-50" : ""}`}
+                  >
+                    <span className="text-ink-2">
+                      {o.item.name} <span className="text-ink-3">· {formatShortDateLabel(o.occDate)}</span>
+                    </span>
+                    <span className={o.posted ? "text-good" : "text-ink"}>
+                      {formatMoney(o.amount)}
+                      {o.skipped && " (skipped)"}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          )}
         </section>
       </div>
     </div>

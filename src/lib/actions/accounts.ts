@@ -34,8 +34,12 @@ export async function createAccount(formData: FormData) {
   const type = String(formData.get("type") ?? "");
   const balance = Number(formData.get("balance") ?? 0);
   const starting_contributed = Number(formData.get("starting_contributed") ?? 0);
-  const is_system = formData.get("is_system") === "on";
-  const system_key = is_system ? slugify(name) : null;
+  // Rev 04 §5: no more "Fed by paycheck contributions" checkbox — every
+  // account gets a linking key, and whether it's actually contribution-fed
+  // is derived live from whether a deduction targets it (see
+  // data/today.ts's checklist builder), not a manually-set flag that can
+  // drift from reality.
+  const system_key = slugify(name);
   const apy_pctRaw = formData.get("apy_pct");
   const apy_pct = apy_pctRaw != null && apy_pctRaw !== "" ? Number(apy_pctRaw) : null;
   const apr_pctRaw = formData.get("apr_pct");
@@ -55,7 +59,6 @@ export async function createAccount(formData: FormData) {
     type,
     balance,
     starting_contributed,
-    is_system,
     system_key,
     apy_pct,
     apr_pct,

@@ -3,6 +3,7 @@ import { ensureSnapshotsForToday, listAllSnapshots } from "@/lib/data/net-worth-
 import { listMarketIndices } from "@/lib/data/market-indices";
 import { listPurchasesInRange } from "@/lib/data/income";
 import { listRecentPayPeriods } from "@/lib/data/history";
+import { listTransfersInRange } from "@/lib/data/transfers";
 import { listRecurringItems, listOccurrencesInRange, listCategories } from "@/lib/data/recurring";
 import { computeNetWorth, aggregateSnapshots } from "@/lib/net-worth";
 import { occurrenceInWindow } from "@/lib/periods";
@@ -32,7 +33,7 @@ export async function getTodayExtras(todayISO: string) {
   const sinceISO = addDays(todayISO, -RECENT_LOOKBACK_DAYS);
   const weekEnd = addDays(todayISO, 7);
 
-  const [snapshots, indices, purchases, recentPayPeriods, recurringItems, occurrences, categories] =
+  const [snapshots, indices, purchases, recentPayPeriods, recurringItems, occurrences, categories, transfers] =
     await Promise.all([
       listAllSnapshots(),
       listMarketIndices(),
@@ -41,7 +42,10 @@ export async function getTodayExtras(todayISO: string) {
       listRecurringItems(),
       listOccurrencesInRange(sinceISO, weekEnd),
       listCategories(),
+      listTransfersInRange(sinceISO, todayISO),
     ]);
+
+  const accountNameById = new Map(accounts.map((a) => [a.id, a.name]));
 
   const netWorth = computeNetWorth(accounts, holdings);
   const assetsCount = accounts.filter((a) => a.type !== "Liabilities").length;
@@ -93,6 +97,19 @@ export async function getTodayExtras(todayISO: string) {
       amount: pp.net_income,
       date: pp.pay_date,
       kind: "income",
+      category: null,
+    });
+  }
+  // Transfers show up in the feed for visibility, but never as spend — see
+  // lib/transfers.ts for why they're excluded from budgets/the ring/net worth.
+  for (const t of transfers) {
+    const toName = accountNameById.get(t.to_account_id) ?? "another account";
+    transactions.push({
+      id: t.id,
+      name: `Transfer to ${toName}`,
+      amount: t.amount,
+      date: t.transfer_date,
+      kind: "transfer",
       category: null,
     });
   }

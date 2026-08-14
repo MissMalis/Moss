@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { computeRingLayout } from "@/lib/ring-layout";
 import { candyColorsForCategories } from "@/lib/candy-colors";
 import { formatCompactMoney, formatMoney } from "@/lib/format";
+import { IconGlyph } from "@/components/IconGlyph";
 
 export interface RingCategory {
   name: string;
@@ -141,7 +142,7 @@ export function SpendingRing({ data }: { data: RingCategory[] }) {
                 className="inline-block h-2.5 w-2.5 rounded-full"
                 style={{ background: legendColors.get(d.name) }}
               />
-              <span aria-hidden>{d.emoji}</span>
+              <IconGlyph value={d.emoji} className="text-[13px]" />
               {d.name}
             </span>
             <span className="font-display text-[13.5px] font-medium text-ink">

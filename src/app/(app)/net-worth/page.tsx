@@ -1,16 +1,27 @@
 import Link from "next/link";
 import { listAccounts, listHoldings, ACCOUNT_TYPES } from "@/lib/data/accounts";
 import { ensureSnapshotsForToday, listAllSnapshots } from "@/lib/data/net-worth-snapshots";
-import { computeNetWorth, accountEmoji, aggregateSnapshots, type HistoryPoint } from "@/lib/net-worth";
+import {
+  computeNetWorth,
+  accountEmoji,
+  accountTypeLabel,
+  accountGroup,
+  aggregateSnapshots,
+  type HistoryPoint,
+} from "@/lib/net-worth";
 import { createAccount } from "@/lib/actions/accounts";
 import { Money } from "@/components/Money";
 import { NetWorthHero } from "@/components/NetWorthHero";
 import { NetWorthLines } from "@/components/NetWorthLines";
 import { AddButton } from "@/components/AddButton";
 import { EmojiPicker } from "@/components/EmojiPicker";
+import { IconGlyph } from "@/components/IconGlyph";
+import { Collapsible } from "@/components/Collapsible";
 import { EmptyState } from "@/components/EmptyState";
 import { Tooltip } from "@/components/Tooltip";
-import { BTN_SOLID, INPUT, LABEL, ROW } from "@/lib/ui";
+import { BTN_SOLID, CARD, CARD_HEADER, INPUT, LABEL, ROW } from "@/lib/ui";
+
+const GROUPS = ["Investments", "Cash", "Liabilities"] as const;
 
 export default async function NetWorthPage() {
   const [accounts, holdings] = await Promise.all([listAccounts(), listHoldings()]);
@@ -39,25 +50,20 @@ export default async function NetWorthPage() {
     snapshotsByAccount.set(s.account_id, list);
   }
 
-  const assets = accounts.filter((a) => a.type !== "Liabilities");
-  const liabilities = accounts.filter((a) => a.type === "Liabilities");
-
   function AccountRow({ a }: { a: (typeof accounts)[number] }) {
     const accountHoldings = holdingsByAccount.get(a.id) ?? [];
-    const trackable = accountHoldings.length > 0 || a.is_system;
+    const trackable = accountGroup(a.type) === "Investments" || accountHoldings.length > 0;
     const series = snapshotsByAccount.get(a.id) ?? [];
     const value = netWorth.accounts.find((av) => av.id === a.id)?.value ?? a.balance;
 
     return (
       <Link href={`/net-worth/${a.id}`} className={`${ROW} flex items-center justify-between gap-4 transition hover:border-border-strong`}>
         <div className="flex items-center gap-3">
-          <span className="text-xl" aria-hidden>
-            {a.icon || accountEmoji(a.type)}
-          </span>
+          <IconGlyph value={a.icon} fallback={accountEmoji(a.type)} className="text-[20px]" />
           <div>
             <p className="text-[14px] text-ink">{a.name}</p>
             <p className="text-[12px] text-ink-3">
-              {a.type}
+              {accountTypeLabel(a.type)}
               {a.type === "Liabilities" && a.apr_pct ? ` · ${a.apr_pct}% APR` : ""}
               {a.type === "HYSA" && a.apy_pct ? ` · ${a.apy_pct}% APY` : ""}
             </p>
@@ -72,36 +78,11 @@ export default async function NetWorthPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <NetWorthHero total={netWorth.total} points={historyPoints} />
 
-      <section>
-        <h2 className="mb-3 font-display text-[22px] font-medium text-ink">Assets</h2>
-        {assets.length === 0 ? (
-          <EmptyState emoji="🏦" title="No accounts yet" hint="Add your first one below." />
-        ) : (
-          <div className="space-y-2">
-            {assets.map((a) => (
-              <AccountRow key={a.id} a={a} />
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section>
-        <h2 className="mb-3 font-display text-[22px] font-medium text-ink">Liabilities</h2>
-        {liabilities.length === 0 ? (
-          <EmptyState emoji="💳" title="No liabilities tracked" hint="Add a credit card or loan below." />
-        ) : (
-          <div className="space-y-2">
-            {liabilities.map((a) => (
-              <AccountRow key={a.id} a={a} />
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section>
+      <div className="flex items-center justify-between">
+        <p className={CARD_HEADER}>Accounts</p>
         <AddButton label="Add account">
           <form action={createAccount} className="flex flex-wrap items-end gap-3">
             <label className={LABEL}>
@@ -117,7 +98,7 @@ export default async function NetWorthPage() {
               <select name="type" className={INPUT}>
                 {ACCOUNT_TYPES.map((t) => (
                   <option key={t} value={t}>
-                    {t}
+                    {accountTypeLabel(t)}
                   </option>
                 ))}
               </select>
@@ -127,13 +108,16 @@ export default async function NetWorthPage() {
               <input type="number" step="0.01" name="balance" defaultValue={0} className={`w-32 ${INPUT}`} />
             </label>
             <label className={LABEL}>
-              Starting contributed
+              <span className="flex items-center gap-1">
+                Total contributions
+                <Tooltip text="What you've put in overall, including anything from before Moss — used to show growth vs. contributions." />
+              </span>
               <input type="number" step="0.01" name="starting_contributed" defaultValue={0} className={`w-32 ${INPUT}`} />
             </label>
             <label className={LABEL}>
               <span className="flex items-center gap-1">
                 APY %
-                <Tooltip text="For a high-yield savings account — used to show accrued interest. Leave blank for anything else." />
+                <Tooltip text="For a High-Yield Savings Account — used to show accrued interest. Leave blank for anything else." />
               </span>
               <input type="number" step="0.01" name="apy_pct" className={`w-20 ${INPUT}`} />
             </label>
@@ -147,27 +131,43 @@ export default async function NetWorthPage() {
             <label className={LABEL}>
               <span className="flex items-center gap-1">
                 Min cash
-                <Tooltip text="For an investing account with a cash sleeve — Moss nudges you if the balance dips under this, since that usually means holdings got auto-sold to cover something." />
+                <Tooltip text="For HSA — Moss nudges you if the cash balance dips under this, since that usually means a charge triggered an auto-sell." />
               </span>
               <input type="number" step="0.01" name="min_cash" className={`w-20 ${INPUT}`} />
             </label>
             <label className={LABEL}>
               <span className="flex items-center gap-1">
                 Annual limit
-                <Tooltip text="Optional — for 401k/HSA/IRA accounts, Moss will show how close you are to it as the year goes." />
+                <Tooltip text="Optional — for 401(k)/HSA/IRA accounts, Moss will show how close you are to it as the year goes." />
               </span>
               <input type="number" step="0.01" name="annual_contribution_limit" className={`w-28 ${INPUT}`} />
-            </label>
-            <label className="flex items-center gap-1.5 pb-2 text-[12.5px] text-ink-2">
-              <input type="checkbox" name="is_system" />
-              Fed by paycheck contributions
             </label>
             <button type="submit" className={BTN_SOLID}>
               Add account
             </button>
           </form>
         </AddButton>
-      </section>
+      </div>
+
+      {accounts.length === 0 ? (
+        <EmptyState emoji="🏦" title="No accounts yet" hint="Add your first one above." />
+      ) : (
+        GROUPS.map((group) => {
+          const inGroup = accounts.filter((a) => accountGroup(a.type) === group);
+          if (inGroup.length === 0) return null;
+          return (
+            <div key={group} className={CARD}>
+              <Collapsible defaultOpen summary={<p className={CARD_HEADER}>{group}</p>}>
+                <div className="mt-3 space-y-2">
+                  {inGroup.map((a) => (
+                    <AccountRow key={a.id} a={a} />
+                  ))}
+                </div>
+              </Collapsible>
+            </div>
+          );
+        })
+      )}
     </div>
   );
 }

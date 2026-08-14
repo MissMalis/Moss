@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAccount, listHoldingsForAccount, ACCOUNT_TYPES } from "@/lib/data/accounts";
 import { listSnapshotsForAccount } from "@/lib/data/net-worth-snapshots";
-import { accountEmoji } from "@/lib/net-worth";
+import { accountEmoji, accountTypeLabel, accountGroup, HOLDINGS_TYPES } from "@/lib/net-worth";
 import {
   updateAccount,
   deleteAccount,
@@ -15,10 +15,13 @@ import { Money } from "@/components/Money";
 import { NetWorthLines } from "@/components/NetWorthLines";
 import { AddButton } from "@/components/AddButton";
 import { EmojiPicker } from "@/components/EmojiPicker";
+import { IconGlyph } from "@/components/IconGlyph";
 import { EmptyState } from "@/components/EmptyState";
-import { BTN_GHOST, CARD, INPUT, LABEL, LINK_QUIET } from "@/lib/ui";
+import { BTN_GHOST, CARD, CARD_HEADER, INPUT, LABEL, LINK_QUIET } from "@/lib/ui";
 
-const NO_MARKET_TYPES = new Set(["Cash", "Liabilities", "Stored-value"]);
+// Holdings grid columns, shared between the header row and every data row
+// so figures actually line up (rev 04 §5 — this was misaligned before).
+const HOLDINGS_GRID = "grid grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr_auto] items-center gap-2";
 
 export default async function AccountDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -35,22 +38,24 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
   const series = snapshotRows.map((s) => ({ date: s.snapshot_date, contributed: s.contributed, marketValue: s.market_value }));
   const latest = series[series.length - 1];
   const growth = latest ? latest.marketValue - latest.contributed : 0;
-  const hasHoldings = holdings.length > 0;
+  const group = accountGroup(account.type);
+  // Rev 04 §5: cash sleeve only for HSA; the holdings-only types (401(k),
+  // IRAs, brokerage) no longer show a balance field at all.
+  const showsBalance = !HOLDINGS_TYPES.has(account.type);
+  const showsHoldings = HOLDINGS_TYPES.has(account.type);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <Link href="/net-worth" className={LINK_QUIET}>
         ← Net worth
       </Link>
 
-      <section>
+      <section className={CARD}>
         <div className="flex items-center gap-3">
-          <span className="text-2xl" aria-hidden>
-            {account.icon || accountEmoji(account.type)}
-          </span>
+          <IconGlyph value={account.icon} fallback={accountEmoji(account.type)} className="text-[24px]" />
           <div>
-            <h1 className="font-display text-[24px] font-medium text-ink">{account.name}</h1>
-            <p className="text-[13px] text-ink-3">{account.type}</p>
+            <h1 className="font-display text-[22px] font-medium text-ink">{account.name}</h1>
+            <p className="text-[13px] text-ink-3">{accountTypeLabel(account.type)}</p>
           </div>
         </div>
         <div className="mt-3">
@@ -67,32 +72,33 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
             </p>
           ) : null}
         </div>
+
+        {series.length > 1 && (
+          <div className="mt-4">
+            <NetWorthLines points={series} variant="full" />
+          </div>
+        )}
       </section>
 
-      {series.length > 1 && (
-        <section>
-          <h2 className="mb-3 font-display text-[18px] font-medium text-ink">Balance over time</h2>
-          <NetWorthLines points={series} variant="full" />
-        </section>
-      )}
-
       <section className={`flex flex-wrap items-end gap-3 ${CARD}`}>
-        <form action={updateAccountBalance} className="flex items-end gap-2">
-          <input type="hidden" name="id" value={account.id} />
-          <label className={LABEL}>
-            {hasHoldings ? "Cash sleeve" : "Balance"}
-            <input type="number" step="0.01" name="balance" defaultValue={account.balance ?? 0} className={`w-32 ${INPUT}`} />
-          </label>
-          <button type="submit" className={BTN_GHOST}>
-            Save
-          </button>
-        </form>
+        {showsBalance && (
+          <form action={updateAccountBalance} className="flex items-end gap-2">
+            <input type="hidden" name="id" value={account.id} />
+            <label className={LABEL}>
+              {account.type === "HSA" ? "Cash" : "Balance"}
+              <input type="number" step="0.01" name="balance" defaultValue={account.balance ?? 0} className={`w-32 ${INPUT}`} />
+            </label>
+            <button type="submit" className={BTN_GHOST}>
+              Save
+            </button>
+          </form>
+        )}
 
-        {(hasHoldings || account.is_system) && (
+        {group === "Investments" && (
           <form action={updateStartingContributed} className="flex items-end gap-2">
             <input type="hidden" name="id" value={account.id} />
             <label className={LABEL}>
-              Starting contributed
+              Total contributions
               <input
                 type="number"
                 step="0.01"
@@ -115,9 +121,9 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
         )}
       </section>
 
-      <section>
-        <h2 className="mb-3 font-display text-[18px] font-medium text-ink">Details</h2>
-        <form action={updateAccount} className={`flex flex-wrap items-end gap-3 ${CARD}`}>
+      <section className={CARD}>
+        <p className={CARD_HEADER}>Details</p>
+        <form action={updateAccount} className="mt-3 flex flex-wrap items-end gap-3">
           <input type="hidden" name="id" value={account.id} />
           <label className={LABEL}>
             Icon
@@ -132,7 +138,7 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
             <select name="type" defaultValue={account.type} className={INPUT}>
               {ACCOUNT_TYPES.map((t) => (
                 <option key={t} value={t}>
-                  {t}
+                  {accountTypeLabel(t)}
                 </option>
               ))}
             </select>
@@ -165,72 +171,68 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
         </form>
       </section>
 
-      {!NO_MARKET_TYPES.has(account.type) && (
-        <section>
-          <h2 className="mb-3 font-display text-[18px] font-medium text-ink">Holdings</h2>
+      {showsHoldings && (
+        <section className={CARD}>
+          <p className={CARD_HEADER}>Holdings</p>
           {holdings.length === 0 ? (
-            <EmptyState emoji="📈" title="No positions yet" hint="Add one below." />
+            <div className="mt-3">
+              <EmptyState emoji="📈" title="No positions yet" hint="Add one below." />
+            </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-[13px]">
-                <thead>
-                  <tr className="text-left text-[11px] uppercase tracking-wide text-ink-3">
-                    <th className="pb-1.5 font-normal">Symbol</th>
-                    <th className="pb-1.5 font-normal">Shares</th>
-                    <th className="pb-1.5 font-normal">Cost basis</th>
-                    <th className="pb-1.5 font-normal">Date</th>
-                    <th className="pb-1.5 font-normal">Price</th>
-                    <th className="pb-1.5 font-normal">Value</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {holdings.map((h) => (
-                    <tr key={h.id} className="border-t border-border">
-                      <td colSpan={6} className="py-2">
-                        <form action={updateHolding} className="flex flex-wrap items-center gap-2">
-                          <input type="hidden" name="id" value={h.id} />
-                          <input name="symbol" defaultValue={h.symbol} className={`w-16 py-1 text-[12.5px] ${INPUT}`} />
-                          <input
-                            type="number"
-                            step="0.0001"
-                            name="qty"
-                            defaultValue={h.qty}
-                            className={`w-16 py-1 text-right text-[12.5px] ${INPUT}`}
-                          />
-                          <input
-                            type="number"
-                            step="0.0001"
-                            name="cost_basis"
-                            defaultValue={h.cost_basis}
-                            className={`w-20 py-1 text-right text-[12.5px] ${INPUT}`}
-                          />
-                          <input type="date" name="buy_date" defaultValue={h.buy_date ?? ""} className={`py-1 text-[12.5px] ${INPUT}`} />
-                          <input
-                            type="number"
-                            step="0.0001"
-                            name="current_price"
-                            defaultValue={h.current_price}
-                            className={`w-20 py-1 text-right text-[12.5px] ${INPUT}`}
-                          />
-                          <span className="text-ink tabular-nums">{formatMoney(h.qty * h.current_price)}</span>
-                          <button type="submit" className={LINK_QUIET}>
-                            Save
-                          </button>
-                        </form>
-                      </td>
-                      <td className="py-2 text-right">
+            <div className="mt-3 overflow-x-auto">
+              <div className={`${HOLDINGS_GRID} pb-1.5 text-[11px] uppercase tracking-wide text-ink-3`}>
+                <span>Symbol</span>
+                <span>Shares</span>
+                <span>Cost basis</span>
+                <span>Date</span>
+                <span>Price</span>
+                <span>Value</span>
+                <span />
+              </div>
+              <div className="space-y-1.5">
+                {holdings.map((h) => {
+                  const formId = `holding-${h.id}`;
+                  return (
+                    <div key={h.id} className={`${HOLDINGS_GRID} rounded-lg border border-border bg-card-soft px-2 py-1.5 text-[12.5px]`}>
+                      {/* An empty, display:none <form> whose action every input below associates with via the form="" attribute — keeps the grid columns real siblings instead of nested inside a <form>, which is what caused the old misalignment, without the form itself eating a grid cell. */}
+                      <form id={formId} action={updateHolding} className="hidden">
+                        <input type="hidden" name="id" value={h.id} />
+                      </form>
+                      <input form={formId} name="symbol" defaultValue={h.symbol} className={`w-full py-1 text-[12.5px] ${INPUT}`} />
+                      <input form={formId} type="number" step="0.0001" name="qty" defaultValue={h.qty} className={`w-full py-1 text-right text-[12.5px] ${INPUT}`} />
+                      <input
+                        form={formId}
+                        type="number"
+                        step="0.0001"
+                        name="cost_basis"
+                        defaultValue={h.cost_basis}
+                        className={`w-full py-1 text-right text-[12.5px] ${INPUT}`}
+                      />
+                      <input form={formId} type="date" name="buy_date" defaultValue={h.buy_date ?? ""} className={`w-full py-1 text-[12.5px] ${INPUT}`} />
+                      <input
+                        form={formId}
+                        type="number"
+                        step="0.0001"
+                        name="current_price"
+                        defaultValue={h.current_price}
+                        className={`w-full py-1 text-right text-[12.5px] ${INPUT}`}
+                      />
+                      <span className="text-ink tabular-nums">{formatMoney(h.qty * h.current_price)}</span>
+                      <span className="flex items-center gap-2 justify-self-end">
+                        <button form={formId} type="submit" className={LINK_QUIET}>
+                          Save
+                        </button>
                         <form action={deleteHolding}>
                           <input type="hidden" name="id" value={h.id} />
                           <button type="submit" className={LINK_QUIET}>
                             Remove
                           </button>
                         </form>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 

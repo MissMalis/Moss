@@ -6,6 +6,7 @@ import { Money } from "@/components/Money";
 import { filterByRange, computeDeltas, type RangeKey } from "@/lib/net-worth-range";
 import { formatMoney, formatShortDateLabel } from "@/lib/format";
 import type { HistoryPoint } from "@/lib/net-worth";
+import { CARD, CARD_HEADER } from "@/lib/ui";
 
 const RANGES: RangeKey[] = ["3M", "6M", "1Y", "ALL"];
 
@@ -15,8 +16,8 @@ export function NetWorthHero({ total, points }: { total: number; points: History
   const deltas = computeDeltas(points, rangePoints);
 
   return (
-    <section>
-      <p className="text-[12.5px] uppercase tracking-wide text-ink-3">Net worth</p>
+    <section className={`${CARD} flex h-full flex-col`}>
+      <p className={CARD_HEADER}>Net worth</p>
       <Money value={total} size="section" />
 
       {deltas && (
@@ -57,7 +58,7 @@ export function NetWorthHero({ total, points }: { total: number; points: History
         </span>
       </div>
 
-      <div className="mt-2">
+      <div className="mt-2 flex-1">
         <NetWorthLines points={rangePoints} variant="full" />
       </div>
     </section>

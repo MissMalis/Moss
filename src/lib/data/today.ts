@@ -13,6 +13,9 @@ import { listRecurringItems, listOccurrencesInRange, listCategories } from "@/li
 import { closeElapsedPeriods } from "@/lib/data/close-periods";
 import { listAccounts, listHoldings } from "@/lib/data/accounts";
 import { listAllSnapshots } from "@/lib/data/net-worth-snapshots";
+import { listDismissedAlertIds } from "@/lib/data/alerts";
+import { listTransfersInRange } from "@/lib/data/transfers";
+import { transfersSafeToSpendImpact } from "@/lib/transfers";
 import { reconciliationStatus } from "@/lib/cards";
 import { buildReviewChecklist, type ReviewItem } from "@/lib/checklist";
 
@@ -48,12 +51,21 @@ async function buildTodayReviewChecklist(): Promise<ReviewItem[]> {
   const lookbackStart = new Date();
   lookbackStart.setDate(lookbackStart.getDate() - CHECKLIST_LOOKBACK_DAYS);
 
-  const [accounts, snapshots, holdings, recentPurchases] = await Promise.all([
+  const [accounts, snapshots, holdings, recentPurchases, dismissedIds, deductions] = await Promise.all([
     listAccounts(),
     listAllSnapshots(),
     listHoldings(),
     listPurchasesInRange(lookbackStart.toISOString().slice(0, 10), todayISO),
+    listDismissedAlertIds(),
+    listDeductions(),
   ]);
+
+  // Rev 04 §5: "contribution-fed" is derived from whether a deduction
+  // actually targets this account, not a manually-set checkbox that can
+  // drift from reality.
+  const contributionFedKeys = new Set(
+    deductions.map((d) => d.target_account_key).filter((k): k is string => !!k),
+  );
 
   const contributedByAccount = new Map<string, number>();
   for (const s of snapshots) {
@@ -76,9 +88,10 @@ async function buildTodayReviewChecklist(): Promise<ReviewItem[]> {
   const bufferAccount = accounts.find((a) => a.is_forbidden_money) ?? null;
   const status = bufferAccount ? reconciliationStatus(bufferAccount) : null;
 
-  return buildReviewChecklist({
+  const items = buildReviewChecklist({
     accounts: accounts.map((a) => ({
       ...a,
+      is_system: !!a.system_key && contributionFedKeys.has(a.system_key),
       hasHoldings: accountsWithHoldings.has(a.id),
     })),
     contributedByAccount,
@@ -87,6 +100,8 @@ async function buildTodayReviewChecklist(): Promise<ReviewItem[]> {
     bufferShortBy: status?.shortBy ?? 0,
     todayISO,
   });
+
+  return items.filter((item) => !dismissedIds.has(item.id));
 }
 
 export async function getTodaySnapshot(): Promise<TodaySnapshot> {
@@ -155,7 +170,7 @@ export async function getTodaySnapshot(): Promise<TodaySnapshot> {
   const futureWindows = windows.filter((w) => w.payDate > window.payDate).slice(0, 2);
   const scanEnd = futureWindows.at(-1)?.end ?? window.end;
 
-  const [occurrenceRows, purchasesInWindow, purchasesInPrevious, posted, categories, previousClosed] =
+  const [occurrenceRows, purchasesInWindow, purchasesInPrevious, posted, categories, previousClosed, accounts, transfersInWindow, transfersInPrevious] =
     await Promise.all([
       listOccurrencesInRange(scanStart, scanEnd),
       listPurchasesInRange(window.start, window.end),
@@ -167,6 +182,11 @@ export async function getTodaySnapshot(): Promise<TodaySnapshot> {
       previousWindow
         ? findPostedPayPeriod(primarySource.id, previousWindow.payDate)
         : Promise.resolve(null),
+      listAccounts(),
+      listTransfersInRange(window.start, window.end),
+      previousWindow
+        ? listTransfersInRange(previousWindow.start, previousWindow.end)
+        : Promise.resolve([]),
     ]);
 
   const occurrenceState = new Map(
@@ -186,9 +206,13 @@ export async function getTodaySnapshot(): Promise<TodaySnapshot> {
   // and never touch this number. Loading a stored-value account IS a
   // checking-sourced "purchase" (that's the one Safe-to-Spend hit), so it's
   // naturally included here without special-casing.
-  const purchasesTotal = purchasesInWindow
-    .filter((p) => p.payment_source === "checking")
-    .reduce((s, p) => s + p.amount, 0);
+  // A move-money transfer (rev 04 §4) isn't a purchase — it's folded into
+  // this same total (not the `purchases` table) so it hits Safe-to-Spend
+  // exactly like a checking-sourced expense would, without ever leaking
+  // into spend reports/budgets/the ring, which only ever read `purchases`.
+  const purchasesTotal =
+    purchasesInWindow.filter((p) => p.payment_source === "checking").reduce((s, p) => s + p.amount, 0) +
+    transfersSafeToSpendImpact(transfersInWindow, accounts);
 
   // Rollover prefers the frozen value from a closed previous period (the
   // period-close job runs above); only falls back to a live, one-step-back
@@ -201,9 +225,9 @@ export async function getTodaySnapshot(): Promise<TodaySnapshot> {
       buildOccurrencesForWindow(recurringItems, occurrenceState, previousWindow.start, previousWindow.end),
     );
     const prevIncome = netIncomeForWindow(incomeSources, deductions, previousWindow, todayISO);
-    const prevPurchasesTotal = purchasesInPrevious
-      .filter((p) => p.payment_source === "checking")
-      .reduce((s, p) => s + p.amount, 0);
+    const prevPurchasesTotal =
+      purchasesInPrevious.filter((p) => p.payment_source === "checking").reduce((s, p) => s + p.amount, 0) +
+      transfersSafeToSpendImpact(transfersInPrevious, accounts);
     const prevSTS = safeToSpend({
       income: prevIncome,
       rollover: 0,

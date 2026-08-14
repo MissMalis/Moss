@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { accountGroup } from "@/lib/net-worth";
 import type { Database } from "@/lib/database.types";
 
 type AccountRow = Database["public"]["Tables"]["accounts"]["Row"];
@@ -75,7 +76,11 @@ export async function ensureSnapshotsForToday(preloaded?: {
   for (const account of accounts) {
     const accountHoldings = holdingsByAccount.get(account.id) ?? [];
     const hasHoldings = accountHoldings.length > 0;
-    const trackable = hasHoldings || account.is_system;
+    // Rev 04 §5: track anything in the "Investments" group (holdings-
+    // bearing types, plus HSA's cash sleeve) rather than trusting the old
+    // manually-set is_system flag — Cash/Liabilities don't grow via
+    // contributions vs. market movement, so they're skipped either way.
+    const trackable = hasHoldings || accountGroup(account.type) === "Investments";
     if (!trackable) continue;
 
     let marketValue: number;

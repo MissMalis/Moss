@@ -156,7 +156,7 @@ export async function deleteDeduction(formData: FormData) {
 
 // ---- Purchases (one-off expense log, brief rev 02 §3 payment-source model) ----
 
-const PAYMENT_SOURCES = ["checking", "investing", "stored_value"] as const;
+const PAYMENT_SOURCES = ["checking", "investing", "stored_value", "rewards_card"] as const;
 type PaymentSource = (typeof PAYMENT_SOURCES)[number];
 
 function isPaymentSource(value: string): value is PaymentSource {
@@ -166,8 +166,10 @@ function isPaymentSource(value: string): value is PaymentSource {
 /**
  * Checking draws Safe-to-Spend in real time (unchanged). Investing/
  * stored-value spends come out of that account's own balance instead —
- * they never touch Safe-to-Spend. Rewards-card spending has its own entry
- * point (Sweep's "log a card charge"), since it's quarantined differently.
+ * they never touch Safe-to-Spend. A rewards-card charge (rev 04 §7) is
+ * quarantined the same way: it's mirrored into card_charges (unswept) so
+ * Sweep's existing pending/reconciliation flow picks it up automatically —
+ * logged once here, never entered twice.
  */
 export async function createPurchase(formData: FormData) {
   const { supabase, user } = await requireUser();
@@ -178,8 +180,11 @@ export async function createPurchase(formData: FormData) {
   const payment_sourceRaw = String(formData.get("payment_source") ?? "checking");
   const payment_source = isPaymentSource(payment_sourceRaw) ? payment_sourceRaw : "checking";
   const source_account_id = String(formData.get("source_account_id") ?? "") || null;
+  const card_id = String(formData.get("card_id") ?? "") || null;
   if (!name || amount <= 0) throw new Error("Name and a positive amount are required");
-  if (payment_source !== "checking" && !source_account_id) {
+  if (payment_source === "rewards_card") {
+    if (!card_id) throw new Error("Pick which card this was charged to");
+  } else if (payment_source !== "checking" && !source_account_id) {
     throw new Error("Pick which account this comes out of");
   }
 
@@ -190,11 +195,32 @@ export async function createPurchase(formData: FormData) {
     spent_on,
     category,
     payment_source,
-    source_account_id,
+    source_account_id: payment_source === "rewards_card" ? null : source_account_id,
+    card_id: payment_source === "rewards_card" ? card_id : null,
   });
   if (error) throw error;
 
-  if (source_account_id) {
+  if (payment_source === "rewards_card" && card_id) {
+    const { data: matchedCategory } = await supabase
+      .from("categories")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("name", category)
+      .maybeSingle();
+
+    const { error: chargeErr } = await supabase.from("card_charges").insert({
+      user_id: user.id,
+      card_id,
+      category_id: matchedCategory?.id ?? null,
+      name,
+      amount,
+      spent_on,
+    });
+    if (chargeErr) throw chargeErr;
+    revalidatePath("/sweep");
+  }
+
+  if (source_account_id && payment_source !== "rewards_card") {
     const { data: account, error: acctErr } = await supabase
       .from("accounts")
       .select("id, balance")
@@ -245,44 +271,6 @@ export async function deletePurchase(formData: FormData) {
       if (updErr) throw updErr;
     }
   }
-
-  revalidatePath("/today");
-  revalidatePath("/expenses");
-  revalidatePath("/net-worth");
-}
-
-/** Funding a stored-value account (transit card, gift card...) from checking — the one Safe-to-Spend hit for that balance. */
-export async function loadStoredValue(formData: FormData) {
-  const { supabase, user } = await requireUser();
-  const account_id = String(formData.get("account_id") ?? "");
-  const amount = Number(formData.get("amount") ?? 0);
-  const spent_on = new Date().toISOString().slice(0, 10);
-  if (!account_id || amount <= 0) throw new Error("Pick an account and a positive amount");
-
-  const { data: account, error: acctErr } = await supabase
-    .from("accounts")
-    .select("id, name, balance")
-    .eq("id", account_id)
-    .maybeSingle();
-  if (acctErr) throw acctErr;
-  if (!account) throw new Error("Account not found");
-
-  const { error: purchaseErr } = await supabase.from("purchases").insert({
-    user_id: user.id,
-    name: `Load ${account.name}`,
-    amount,
-    spent_on,
-    category: "Load",
-    payment_source: "checking",
-    source_account_id: null,
-  });
-  if (purchaseErr) throw purchaseErr;
-
-  const { error: updErr } = await supabase
-    .from("accounts")
-    .update({ balance: (account.balance ?? 0) + amount })
-    .eq("id", account.id);
-  if (updErr) throw updErr;
 
   revalidatePath("/today");
   revalidatePath("/expenses");

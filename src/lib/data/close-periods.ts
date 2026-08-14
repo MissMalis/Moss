@@ -4,6 +4,9 @@ import { buildOccurrencesForWindow, sumEarmarked } from "@/lib/recurring";
 import { computeAutoReserve, netIncomeForWindow, windowsAround } from "@/lib/today";
 import { listIncomeSourcesWithVersions, listDeductions, listPurchasesInRange } from "@/lib/data/income";
 import { listRecurringItems, listOccurrencesInRange } from "@/lib/data/recurring";
+import { listAccounts } from "@/lib/data/accounts";
+import { listTransfersInRange } from "@/lib/data/transfers";
+import { transfersSafeToSpendImpact } from "@/lib/transfers";
 
 const LOOKBACK_MONTHS = 6;
 
@@ -73,6 +76,8 @@ export async function closeElapsedPeriods(preloaded?: {
     occurrenceRows.map((o) => [`${o.recurring_item_id}|${o.occ_date}`, o]),
   );
 
+  const accounts = await listAccounts();
+
   let previousSafeToSpend = 0;
   // Seed from the most recent already-closed period, if any exists just
   // before the earliest pending window.
@@ -98,11 +103,15 @@ export async function closeElapsedPeriods(preloaded?: {
     );
     const earmarked = sumEarmarked(earmarkedItems);
     const income = netIncomeForWindow(incomeSources, deductions, window, window.payDate);
-    const purchasesInWindow = await listPurchasesInRange(window.start, window.end);
-    // Only checking-sourced spending hit Safe-to-Spend (brief rev 02 §3).
-    const purchasesTotal = purchasesInWindow
-      .filter((p) => p.payment_source === "checking")
-      .reduce((s, p) => s + p.amount, 0);
+    const [purchasesInWindow, transfersInWindow] = await Promise.all([
+      listPurchasesInRange(window.start, window.end),
+      listTransfersInRange(window.start, window.end),
+    ]);
+    // Only checking-sourced spending hits Safe-to-Spend (brief rev 02 §3);
+    // a move-money transfer folds in the same way (rev 04 §4).
+    const purchasesTotal =
+      purchasesInWindow.filter((p) => p.payment_source === "checking").reduce((s, p) => s + p.amount, 0) +
+      transfersSafeToSpendImpact(transfersInWindow, accounts);
     const autoReserve = computeAutoReserve(
       primarySource,
       incomeSources,

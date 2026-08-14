@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { BTN_SOLID, INPUT } from "@/lib/ui";
+import { parseBoldSegments } from "@/lib/simple-markdown";
 
 export function AdvisorPanel() {
   const [question, setQuestion] = useState("");
@@ -48,7 +49,19 @@ export function AdvisorPanel() {
         </button>
       </form>
       {error && <p className="mt-3 text-[13px] text-bad">{error}</p>}
-      {answer && <p className="mt-3 text-[13.5px] leading-relaxed text-ink-2">{answer}</p>}
+      {answer && (
+        <p className="mt-3 text-[13.5px] leading-relaxed text-ink-2">
+          {parseBoldSegments(answer).map((seg, i) =>
+            seg.bold ? (
+              <strong key={i} className="font-medium text-ink">
+                {seg.text}
+              </strong>
+            ) : (
+              <span key={i}>{seg.text}</span>
+            ),
+          )}
+        </p>
+      )}
     </div>
   );
 }

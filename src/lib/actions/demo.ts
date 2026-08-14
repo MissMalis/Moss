@@ -25,6 +25,8 @@ function revalidateEverything() {
 // only in that nothing here is actually FK-blocking on delete (accounts/
 // cards cascade or SET NULL downstream), so a flat pass is enough.
 const DEMO_TABLES = [
+  "dismissed_alerts",
+  "transfers",
   "card_charges",
   "card_category_multipliers",
   "cards",
@@ -182,15 +184,7 @@ async function writeDemoDataset(supabase: Client, userId: string) {
   const acctByName = new Map(accounts.map((a) => [a.name, a.id]));
 
   await supabase.from("holdings").insert([
-    {
-      user_id: uid,
-      account_id: acctByName.get("HSA"),
-      symbol: "VTI",
-      qty: 3,
-      cost_basis: 240,
-      current_price: 265,
-      buy_date: iso(monthsAgo(today, 6)),
-    },
+    // HSA is cash-sleeve-only in rev 04 (§5) — no holdings row for it.
     // No public ticker — a manually-priced plan fund, the classic "lump"
     // 401(k) holding that only ever updates when you type a new number in.
     {
@@ -370,7 +364,9 @@ async function writeDemoDataset(supabase: Client, userId: string) {
     { onConflict: "user_id" },
   );
 
-  // ---- Sweep: a couple of pending rewards-card charges ----
+  // ---- Sweep: a couple of pending rewards-card charges — mirrored into
+  // purchases too (payment_source: rewards_card), matching what
+  // createPurchase does for a real logged charge (rev 04 §7, no double-entry). ----
   await supabase.from("card_charges").insert([
     {
       user_id: uid,
@@ -389,6 +385,26 @@ async function writeDemoDataset(supabase: Client, userId: string) {
       spent_on: iso(daysAgo(today, 2)),
     },
   ]);
+  await supabase.from("purchases").insert([
+    {
+      user_id: uid,
+      name: "Clothes",
+      amount: 85,
+      spent_on: iso(daysAgo(today, 3)),
+      category: "Play",
+      payment_source: "rewards_card",
+      card_id: amex.id,
+    },
+    {
+      user_id: uid,
+      name: "Amazon order",
+      amount: 67.3,
+      spent_on: iso(daysAgo(today, 2)),
+      category: "Amazon",
+      payment_source: "rewards_card",
+      card_id: freedom.id,
+    },
+  ]);
 
   // ---- Budgets ----
   await supabase.from("budgets").insert([
@@ -398,9 +414,11 @@ async function writeDemoDataset(supabase: Client, userId: string) {
 
   // ---- Market indices (ticker strip — hardcoded/plausible for demo) ----
   await supabase.from("market_indices").insert([
-    { user_id: uid, symbol: "SPX", label: "S&P 500", value: 5625.3, prev_close: 5590.1 },
-    { user_id: uid, symbol: "IXIC", label: "Nasdaq", value: 17845.2, prev_close: 17920.5 },
     { user_id: uid, symbol: "DJI", label: "Dow", value: 41235.6, prev_close: 41100.75 },
+    { user_id: uid, symbol: "IXIC", label: "Nasdaq", value: 17845.2, prev_close: 17920.5 },
+    { user_id: uid, symbol: "SPX", label: "S&P 500", value: 5625.3, prev_close: 5590.1 },
+    { user_id: uid, symbol: "RUT", label: "Russell 2000", value: 2215.4, prev_close: 2198.9 },
+    { user_id: uid, symbol: "US10Y", label: "10Y", value: 4.28, prev_close: 4.25 },
   ]);
 
   // ---- One-off expenses, on different payment sources (tests the routing) ----
@@ -427,6 +445,15 @@ async function writeDemoDataset(supabase: Client, userId: string) {
       source_account_id: acctByName.get("Transit card"),
     })),
   ]);
+
+  // ---- A move-money transfer (rev 04 §4) — checking to the transit card, the "reload" pattern ----
+  await supabase.from("transfers").insert({
+    user_id: uid,
+    from_account_id: acctByName.get("Checking"),
+    to_account_id: acctByName.get("Transit card"),
+    amount: 20,
+    transfer_date: iso(daysAgo(today, 9)),
+  });
 
   // ---- Freelance's one-off payment, as its own frozen "pay period" so it shows up in Recent ----
   const freelanceDate = iso(daysAgo(today, 7));
@@ -492,7 +519,7 @@ async function writeDemoDataset(supabase: Client, userId: string) {
 
   // ---- Net-worth-over-time: ~12 monthly snapshots per investable account ----
   const snapshotPlan: { name: string; startContributed: number; startMarket: number; endContributed: number; endMarket: number }[] = [
-    { name: "HSA", startContributed: 200, startMarket: 250, endContributed: 720, endMarket: 900 + 3 * 265 },
+    { name: "HSA", startContributed: 200, startMarket: 210, endContributed: 850, endMarket: 900 },
     { name: "401(k)", startContributed: 24000, startMarket: 33000, endContributed: 30000, endMarket: 42000 },
     { name: "Roth IRA", startContributed: 6800, startMarket: 7400, endContributed: 8990, endMarket: 150 + 20 * 265 + 45 * 82 },
     { name: "Taxable Brokerage", startContributed: 5900, startMarket: 6300, endContributed: 6375, endMarket: 15 * 190 + 22 * 265 },

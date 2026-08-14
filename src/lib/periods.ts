@@ -107,6 +107,18 @@ export function occurrenceInWindow(
   return null;
 }
 
+/** The next date (on or after `fromISO`) this day-of-month item is due — for the "All recurring bills" master list countdown (rev 04 §6). */
+export function nextOccurrenceOnOrAfter(item: RecurringItemForOccurrence, fromISO: string): string {
+  const from = new Date(fromISO + "T00:00:00");
+  for (let m = from.getMonth(); m <= from.getMonth() + 2; m++) {
+    const y = from.getFullYear();
+    const occ = new Date(y, m, Math.min(item.day, new Date(y, m + 1, 0).getDate()));
+    if (occ >= from) return occ.toISOString().slice(0, 10);
+  }
+  // Unreachable in practice (the loop always finds a date within ~2 months).
+  return fromISO;
+}
+
 // Safe to Spend for the current window:
 // income + rollover - earmarkedBills - autoReserve - loggedPurchases
 export interface SafeToSpendInputs {

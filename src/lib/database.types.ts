@@ -130,8 +130,9 @@ export interface Database {
         amount: number;
         spent_on: string;
         category: string;
-        payment_source: "checking" | "investing" | "stored_value";
+        payment_source: "checking" | "investing" | "stored_value" | "rewards_card";
         source_account_id: string | null;
+        card_id: string | null;
         created_at: string;
       }>;
       pay_periods: Row<{
@@ -214,6 +215,21 @@ export interface Database {
         value: number;
         prev_close: number;
         updated_at: string;
+      }>;
+      dismissed_alerts: Row<{
+        id: string;
+        user_id: string;
+        alert_id: string;
+        dismissed_at: string;
+      }>;
+      transfers: Row<{
+        id: string;
+        user_id: string;
+        from_account_id: string;
+        to_account_id: string;
+        amount: number;
+        transfer_date: string;
+        created_at: string;
       }>;
     };
     Views: Record<string, never>;

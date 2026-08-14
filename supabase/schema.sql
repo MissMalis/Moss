@@ -553,3 +553,58 @@ create policy "market_indices_owner" on market_indices
 -- hand-refreshed, so Moss can nudge you to update it.
 alter table accounts add column if not exists min_cash numeric(12,2);
 alter table accounts add column if not exists balance_updated_at timestamptz default now();
+
+-- ============================================================
+-- Moss — Revision 04
+-- ============================================================
+
+-- §2: "Alerts" rows are checkable (mark done). Nothing to persist per-alert
+-- beyond a dismissal, keyed by the checklist's own deterministic id string
+-- (e.g. "oversold-<account id>") — no separate alerts table needed.
+create table if not exists dismissed_alerts (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users on delete cascade not null,
+  alert_id text not null,
+  dismissed_at timestamptz default now(),
+  unique (user_id, alert_id)
+);
+
+alter table dismissed_alerts enable row level security;
+drop policy if exists "dismissed_alerts_owner" on dismissed_alerts;
+create policy "dismissed_alerts_owner" on dismissed_alerts
+  for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- §4: Move money — a transfer between two of the user's own accounts.
+-- Deliberately NOT a purchases row: a transfer must never touch net worth,
+-- spending reports, budgets, or the expense ring (the money still exists,
+-- just relocated). It only affects Safe to Spend when the source is
+-- checking, computed the same way a checking-sourced purchase is.
+create table if not exists transfers (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users on delete cascade not null,
+  from_account_id uuid references accounts on delete cascade not null,
+  to_account_id uuid references accounts on delete cascade not null,
+  amount numeric(12,2) not null,
+  transfer_date date not null,
+  created_at timestamptz default now()
+);
+
+alter table transfers enable row level security;
+drop policy if exists "transfers_owner" on transfers;
+create policy "transfers_owner" on transfers
+  for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+create index if not exists transfers_user_idx on transfers (user_id);
+create index if not exists transfers_date_idx on transfers (transfer_date);
+
+-- §7: Sweep rebuilt around the transaction log — a rewards-card charge is
+-- now logged once, on Expenses (payment_source = 'rewards_card', with
+-- which card it's on), the same as any other expense. No more separate
+-- "log a card charge" entry point on Sweep — that was the double-entry
+-- the revision calls out. createPurchase mirrors a rewards_card row into
+-- card_charges automatically so Sweep's existing pending/reconciliation
+-- plumbing keeps working unchanged.
+alter table purchases add column if not exists card_id uuid references cards on delete set null;
+alter table purchases drop constraint if exists purchases_payment_source_check;
+alter table purchases add constraint purchases_payment_source_check
+  check (payment_source in ('checking', 'investing', 'stored_value', 'rewards_card'));

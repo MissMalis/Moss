@@ -78,6 +78,34 @@ export function accountEmoji(type: string): string {
   return ACCOUNT_EMOJI[type] ?? "💰";
 }
 
+// Rev 04 §5: display-only relabeling. The stored `type` values (and every
+// internal comparison against them) are untouched — same pattern as
+// `system_key`/`payment_source` staying internal identifiers while the UI
+// shows something friendlier.
+const ACCOUNT_TYPE_LABELS: Record<string, string> = {
+  HYSA: "High-Yield Savings Account",
+  "Stored-value": "Prepaid / reloadable",
+  Liabilities: "Liability",
+};
+
+export function accountTypeLabel(type: string): string {
+  return ACCOUNT_TYPE_LABELS[type] ?? type;
+}
+
+// §5 account-builder fixes: holdings only exist for true investing types;
+// HSA is cash-sleeve-only now (real HSAs can have both, but this revision
+// simplifies HSA to cash so there's exactly one "has a genuine cash
+// balance alongside holdings" type — none — everything else is one or the
+// other). Every other type shows a plain balance (not framed as a "cash
+// sleeve", since there's nothing else in the account to sit alongside).
+export const HOLDINGS_TYPES = new Set(["401(k)", "Roth IRA", "Traditional IRA", "Taxable Brokerage"]);
+
+export function accountGroup(type: string): "Investments" | "Cash" | "Liabilities" {
+  if (type === "Liabilities") return "Liabilities";
+  if (HOLDINGS_TYPES.has(type) || type === "HSA") return "Investments";
+  return "Cash";
+}
+
 export interface SnapshotPoint {
   snapshot_date: string;
   account_id: string;

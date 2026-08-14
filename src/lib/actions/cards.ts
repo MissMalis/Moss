@@ -97,24 +97,10 @@ export async function deleteMultiplier(formData: FormData) {
 }
 
 // ---- Card charges (quarantined from Safe-to-Spend until swept) ----
-
-export async function createCardCharge(formData: FormData) {
-  const { supabase, user } = await requireUser();
-  const card_id = String(formData.get("card_id") ?? "");
-  const category_id = String(formData.get("category_id") ?? "") || null;
-  const name = String(formData.get("name") ?? "").trim();
-  const amount = Number(formData.get("amount") ?? 0);
-  const spent_on = String(formData.get("spent_on") ?? "") || new Date().toISOString().slice(0, 10);
-  if (!card_id || !name || amount <= 0) {
-    throw new Error("Card, name, and a positive amount are required");
-  }
-
-  const { error } = await supabase
-    .from("card_charges")
-    .insert({ user_id: user.id, card_id, category_id, name, amount, spent_on });
-  if (error) throw error;
-  revalidateSweep();
-}
+// No standalone "log a charge" action here anymore (rev 04 §7) — a
+// rewards-card charge is logged once, on Expenses, and createPurchase
+// mirrors it into card_charges itself. This avoids the double-entry the
+// old separate Sweep form created.
 
 export async function deleteCardCharge(formData: FormData) {
   const { supabase } = await requireUser();
@@ -197,6 +183,55 @@ export async function reconcileForbiddenMoney(formData: FormData) {
   const { error } = await supabase.from("accounts").update({ reconciled_balance }).eq("id", id);
   if (error) throw error;
   revalidateSweep();
+}
+
+// ---- Settling up: pay off a card's balance from the buffer ----
+
+/**
+ * Rev 04 §7: records paying off a credit card from the buffer/channeling
+ * account. Unlike a generic Move Money transfer, both sides go DOWN — the
+ * buffer loses the cash, and the liability owes less — so this can't reuse
+ * lib/transfers.ts's symmetric credit/debit logic.
+ */
+export async function payOffCard(formData: FormData) {
+  const { supabase, user } = await requireUser();
+  const buffer_account_id = String(formData.get("buffer_account_id") ?? "");
+  const liability_account_id = String(formData.get("liability_account_id") ?? "");
+  const amount = Number(formData.get("amount") ?? 0);
+  if (!buffer_account_id || !liability_account_id) throw new Error("Pick the buffer and the card's liability account");
+  if (amount <= 0) throw new Error("Amount must be positive");
+
+  const { data: buffer, error: bufferErr } = await supabase
+    .from("accounts")
+    .select("id, balance")
+    .eq("id", buffer_account_id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (bufferErr) throw bufferErr;
+  if (!buffer) throw new Error("Buffer account not found");
+
+  const { data: liability, error: liabilityErr } = await supabase
+    .from("accounts")
+    .select("id, balance")
+    .eq("id", liability_account_id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (liabilityErr) throw liabilityErr;
+  if (!liability) throw new Error("Liability account not found");
+
+  const { error: bufferUpdErr } = await supabase
+    .from("accounts")
+    .update({ balance: (buffer.balance ?? 0) - amount })
+    .eq("id", buffer.id);
+  if (bufferUpdErr) throw bufferUpdErr;
+
+  const { error: liabilityUpdErr } = await supabase
+    .from("accounts")
+    .update({ balance: Math.max(0, (liability.balance ?? 0) - amount) })
+    .eq("id", liability.id);
+  if (liabilityUpdErr) throw liabilityUpdErr;
+
+  revalidateSweepAndNetWorth();
 }
 
 // ---- Which card is the mock channeling-card visual ----

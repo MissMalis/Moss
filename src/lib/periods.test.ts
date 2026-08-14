@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   expectedPayDate,
+  nextOccurrenceOnOrAfter,
   occurrenceInWindow,
   periodsForMonth,
   safeToSpend,
@@ -155,5 +156,23 @@ describe("expectedPayDate (rev 02 §9: early-pay offset applied before the busin
   it("with no weekend involved, only the early-pay offset applies", () => {
     // 2026-01-01 is a Thursday; 1 day early is Wednesday 2025-12-31, a weekday.
     expect(expectedPayDate("2026-01-01", 1, "next")).toBe("2025-12-31");
+  });
+});
+
+describe("nextOccurrenceOnOrAfter", () => {
+  it("finds the occurrence later this month when the day hasn't passed yet", () => {
+    expect(nextOccurrenceOnOrAfter({ day: 20 }, "2026-01-05")).toBe("2026-01-20");
+  });
+
+  it("rolls into next month once the day has already passed", () => {
+    expect(nextOccurrenceOnOrAfter({ day: 5 }, "2026-01-20")).toBe("2026-02-05");
+  });
+
+  it("returns today when the day is today", () => {
+    expect(nextOccurrenceOnOrAfter({ day: 15 }, "2026-01-15")).toBe("2026-01-15");
+  });
+
+  it("clamps to the last day of a short month", () => {
+    expect(nextOccurrenceOnOrAfter({ day: 31 }, "2026-02-01")).toBe("2026-02-28");
   });
 });

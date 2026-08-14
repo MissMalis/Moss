@@ -4,9 +4,14 @@ import { useState } from "react";
 import { createPurchase } from "@/lib/actions/income";
 import { BTN_SOLID, INPUT, LABEL } from "@/lib/ui";
 
-type PaymentSource = "checking" | "investing" | "stored_value";
+type PaymentSource = "checking" | "investing" | "stored_value" | "rewards_card";
 
 interface AccountOption {
+  id: string;
+  name: string;
+}
+
+interface CardOption {
   id: string;
   name: string;
 }
@@ -14,9 +19,11 @@ interface AccountOption {
 export function LogExpenseForm({
   investingAccounts,
   storedValueAccounts,
+  cards = [],
 }: {
   investingAccounts: AccountOption[];
   storedValueAccounts: AccountOption[];
+  cards?: CardOption[];
 }) {
   const [source, setSource] = useState<PaymentSource>("checking");
 
@@ -53,7 +60,8 @@ export function LogExpenseForm({
         >
           <option value="checking">Checking</option>
           {investingAccounts.length > 0 && <option value="investing">Investing cash sleeve</option>}
-          {storedValueAccounts.length > 0 && <option value="stored_value">Stored-value card</option>}
+          {storedValueAccounts.length > 0 && <option value="stored_value">Prepaid / reloadable</option>}
+          {cards.length > 0 && <option value="rewards_card">Rewards card</option>}
         </select>
       </label>
 
@@ -83,14 +91,33 @@ export function LogExpenseForm({
         </label>
       )}
 
+      {source === "rewards_card" && (
+        <label className={LABEL}>
+          Card
+          <select name="card_id" className={INPUT}>
+            {cards.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
       <button type="submit" className={BTN_SOLID}>
         Log the expense
       </button>
 
-      {source !== "checking" && (
+      {source === "rewards_card" ? (
         <p className="w-full text-[12.5px] text-ink-3">
-          Comes out of that account&apos;s own balance — Safe to spend won&apos;t move.
+          Quarantined from Safe to spend — shows up in Sweep to pay off later.
         </p>
+      ) : (
+        source !== "checking" && (
+          <p className="w-full text-[12.5px] text-ink-3">
+            Comes out of that account&apos;s own balance — Safe to spend won&apos;t move.
+          </p>
+        )
       )}
     </form>
   );

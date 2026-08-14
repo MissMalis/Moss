@@ -6,7 +6,7 @@ export interface TransactionLike {
   name: string;
   amount: number;
   date: string; // ISO
-  kind: "income" | "outflow";
+  kind: "income" | "outflow" | "transfer";
   category: string | null;
 }
 
