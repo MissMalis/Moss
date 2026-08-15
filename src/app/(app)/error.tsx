@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { TriangleAlert } from "lucide-react";
 import { BTN_SOLID, CARD } from "@/lib/ui";
 
 export default function AppError({
@@ -17,8 +18,8 @@ export default function AppError({
   return (
     <div className="flex min-h-[60vh] items-center justify-center px-6">
       <div className={`max-w-sm text-center ${CARD}`}>
-        <p className="text-2xl" aria-hidden>
-          🌱
+        <p className="flex justify-center text-bad" aria-hidden>
+          <TriangleAlert size={28} strokeWidth={2} />
         </p>
         <p className="mt-2 text-[15px] text-ink">Something went wrong</p>
         <p className="mt-1 text-[13px] text-ink-2">

@@ -97,6 +97,7 @@ export interface Database {
         user_id: string;
         name: string;
         emoji: string | null;
+        color: string | null;
         sort_order: number;
         created_at: string;
       }>;
@@ -110,6 +111,7 @@ export interface Database {
         day_of_month: number;
         interval_type: "dom" | "days" | "weeks";
         active: boolean;
+        icon: string | null;
         created_at: string;
       }>;
       recurring_occurrences: Row<{
@@ -170,6 +172,7 @@ export interface Database {
         color: string;
         base_multiplier: number;
         icon: string | null;
+        account_id: string | null;
         created_at: string;
       }>;
       card_category_multipliers: Row<{

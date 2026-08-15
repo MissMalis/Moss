@@ -62,22 +62,6 @@ export function computeNetWorth(
   return { total, byType, accounts: accountValues };
 }
 
-const ACCOUNT_EMOJI: Record<string, string> = {
-  Cash: "💵",
-  HYSA: "🏦",
-  "Stored-value": "🚊",
-  HSA: "🏥",
-  "401(k)": "🧓",
-  "Roth IRA": "🌱",
-  "Traditional IRA": "🏛️",
-  "Taxable Brokerage": "📈",
-  Liabilities: "💳",
-};
-
-export function accountEmoji(type: string): string {
-  return ACCOUNT_EMOJI[type] ?? "💰";
-}
-
 // Rev 04 §5: display-only relabeling. The stored `type` values (and every
 // internal comparison against them) are untouched — same pattern as
 // `system_key`/`payment_source` staying internal identifiers while the UI

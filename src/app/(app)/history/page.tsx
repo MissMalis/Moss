@@ -7,8 +7,9 @@ import { Money } from "@/components/Money";
 import { SpendingRing, type RingCategory } from "@/components/SpendingRing";
 import { EmptyState } from "@/components/EmptyState";
 import { BTN_GHOST, CARD, INPUT } from "@/lib/ui";
+import { lucideKey } from "@/lib/icons";
 
-const DEFAULT_CATEGORY_EMOJI = "💳";
+const DEFAULT_CATEGORY_ICON = lucideKey("credit-card");
 
 interface Snapshot {
   earmarked: { name: string; occDate: string; amount: number }[];
@@ -32,7 +33,7 @@ export default async function HistoryPage({
           <p className="mt-1 text-[13px] text-ink-2">Closed pay periods, frozen as they were.</p>
         </div>
         <EmptyState
-          emoji="📬"
+          icon={lucideKey("mail")}
           title="No closed pay periods yet"
           hint="Your first will appear here after a window ends."
         />
@@ -42,7 +43,7 @@ export default async function HistoryPage({
 
   const selected = periods.find((p) => p.pay_date === period) ?? periods[0];
   const snapshot = selected.snapshot as unknown as Snapshot | null;
-  const emojiByCategory = new Map(categories.map((c) => [c.name, c.emoji ?? DEFAULT_CATEGORY_EMOJI]));
+  const iconByCategory = new Map(categories.map((c) => [c.name, c.emoji ?? DEFAULT_CATEGORY_ICON]));
 
   const byCategory = new Map<string, number>();
   for (const e of snapshot?.earmarked ?? []) {
@@ -54,7 +55,7 @@ export default async function HistoryPage({
   }
   const spendingByCategory: RingCategory[] = Array.from(byCategory.entries())
     .filter(([, amount]) => amount > 0)
-    .map(([name, amount]) => ({ name, amount, emoji: emojiByCategory.get(name) ?? DEFAULT_CATEGORY_EMOJI }))
+    .map(([name, amount]) => ({ name, amount, icon: iconByCategory.get(name) ?? DEFAULT_CATEGORY_ICON }))
     .sort((a, b) => b.amount - a.amount);
 
   return (

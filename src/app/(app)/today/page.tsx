@@ -1,8 +1,12 @@
 import Link from "next/link";
+import { Lock } from "lucide-react";
 import { getTodaySnapshot } from "@/lib/data/today";
 import { getTodayExtras } from "@/lib/data/today-extras";
 import { getSettings } from "@/lib/data/settings";
+import { listCategories } from "@/lib/data/recurring";
+import { lucideKey } from "@/lib/icons";
 import { postPaycheck } from "@/lib/actions/income";
+import { seedDemoData } from "@/lib/actions/demo";
 import { expectedPayDate } from "@/lib/periods";
 import { daysUntil, dollarsPerDay } from "@/lib/spend-pace";
 import { formatDateRange, formatMoney, formatShortDateLabel } from "@/lib/format";
@@ -14,7 +18,8 @@ import { NetWorthHero } from "@/components/NetWorthHero";
 import { AlertsCard } from "@/components/AlertsCard";
 import { RecentList } from "@/components/RecentList";
 import { UpcomingStrip } from "@/components/UpcomingStrip";
-import { BTN_MOSS, CARD, CARD_HEADER, LINK_QUIET, PILL_HOLD, SCROLL_LIST } from "@/lib/ui";
+import { CurrentPeriodCard } from "@/components/CurrentPeriodCard";
+import { BTN_MOSS, BTN_SOLID, CARD, CARD_HEADER, LINK_QUIET, PILL_HOLD, SCROLL_LIST } from "@/lib/ui";
 
 function greeting() {
   const hour = new Date().getHours();
@@ -25,24 +30,39 @@ function greeting() {
 
 export default async function TodayPage() {
   const todayISO = new Date().toISOString().slice(0, 10);
-  const [snap, settings] = await Promise.all([getTodaySnapshot(), getSettings()]);
+  const [snap, settings, categories] = await Promise.all([getTodaySnapshot(), getSettings(), listCategories()]);
   const extras = await getTodayExtras(todayISO);
   const { netWorth, historyPoints, indices, recentGroups, upcomingWeek } = extras;
+  const categoryById = new Map(categories.map((c) => [c.id, c]));
 
   if (!snap.hasPrimaryIncome) {
     return (
-      <EmptyState
-        emoji="👋"
-        title="Add an income source to see Safe to spend"
-        hint="Head to Income to get started."
-      />
+      <div className="space-y-4">
+        <EmptyState
+          icon={lucideKey("wallet")}
+          title="Add an income source to see Safe to spend"
+          hint="Head to Income to get started."
+        />
+        {settings.demo_seeded && (
+          <div className="flex flex-col items-center gap-2 text-center">
+            <p className="text-[12.5px] text-ink-3">
+              Had demo data before? Something may have cleared it.
+            </p>
+            <form action={seedDemoData}>
+              <button type="submit" className={BTN_SOLID}>
+                Reload demo data
+              </button>
+            </form>
+          </div>
+        )}
+      </div>
     );
   }
 
   if (!snap.window) {
     return (
       <EmptyState
-        emoji="🗓️"
+        icon={lucideKey("calendar")}
         title="No pay window covers today"
         hint="Check the anchor date for your income in Income."
       />
@@ -71,8 +91,8 @@ export default async function TodayPage() {
       <TickerBar indices={indices} />
 
       <div>
-        <p className="text-[20px] text-ink">{greeting()}</p>
-        <p className="text-[14px] text-ink-2">{formatDateRange(window.start, window.end)}</p>
+        <p className="text-[26px] font-medium leading-tight text-ink">{greeting()}</p>
+        <p className="mt-0.5 text-[15px] text-ink-2">{formatDateRange(window.start, window.end)}</p>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.7fr_1fr]">
@@ -84,7 +104,7 @@ export default async function TodayPage() {
         <p className={CARD_HEADER}>Safe to spend</p>
         <Money value={safeToSpend} size="hero" className="text-moss" />
 
-        <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-moss-bg px-3 py-1.5 text-[13px] font-medium text-moss">
+        <div className="ml-[38px] mt-3 inline-flex items-center gap-1.5 rounded-full bg-moss-bg px-3 py-1.5 text-[13px] font-medium text-moss">
           {formatMoney(perDay)}/day · {daysLeft} day{daysLeft === 1 ? "" : "s"} left
         </div>
 
@@ -98,8 +118,9 @@ export default async function TodayPage() {
         </div>
 
         {autoReserve.reserve > 0 && (
-          <div className={`mt-3 ${PILL_HOLD}`}>
-            🔒 Holding {formatMoney(autoReserve.reserve)} for next paycheck
+          <div className={`mt-3 flex items-center gap-1.5 ${PILL_HOLD}`}>
+            <Lock size={13} strokeWidth={2} />
+            Holding {formatMoney(autoReserve.reserve)} for next paycheck
             <Tooltip text="A future pay period's bills cost more than that paycheck will bring in, so Moss is setting money aside now instead of letting you spend it and come up short later." />
           </div>
         )}
@@ -203,37 +224,14 @@ export default async function TodayPage() {
           </div>
         </section>
 
-        <section className={`${CARD} flex h-full flex-col`}>
-          <p className={CARD_HEADER}>
-            Earmarked this period{" "}
-            <Link href="/expenses" className={`${LINK_QUIET} ml-1`}>
-              Manage →
-            </Link>
-          </p>
-          {earmarkedItems.length === 0 ? (
-            <p className="mt-3 text-[13px] text-ink-3">Nothing earmarked this period.</p>
-          ) : (
-            <div className={`mt-3 flex-1 space-y-1 ${SCROLL_LIST}`}>
-              {earmarkedItems
-                .slice()
-                .sort((a, b) => a.occDate.localeCompare(b.occDate))
-                .map((o) => (
-                  <div
-                    key={`${o.item.id}|${o.occDate}`}
-                    className={`flex items-center justify-between rounded-lg px-2 py-1.5 text-[13px] ${o.skipped ? "opacity-50" : ""}`}
-                  >
-                    <span className="text-ink-2">
-                      {o.item.name} <span className="text-ink-3">· {formatShortDateLabel(o.occDate)}</span>
-                    </span>
-                    <span className={o.posted ? "text-good" : "text-ink"}>
-                      {formatMoney(o.amount)}
-                      {o.skipped && " (skipped)"}
-                    </span>
-                  </div>
-                ))}
-            </div>
-          )}
-        </section>
+        <CurrentPeriodCard
+          title="Earmarked this period"
+          window={window}
+          occurrences={earmarkedItems.slice().sort((a, b) => a.occDate.localeCompare(b.occDate))}
+          categoryById={categoryById}
+          todayISO={todayISO}
+          emptyLabel="Nothing earmarked this period."
+        />
       </div>
     </div>
   );

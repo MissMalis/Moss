@@ -27,6 +27,14 @@ function revalidateSweepAndNetWorth() {
 
 // ---- Cards ----
 
+// Rev 05 §4/§6: cards are now managed from the Net worth account they're
+// linked to (one card per liability account), not a standalone Sweep
+// section — so create/update/delete all revalidate Net worth too.
+function revalidateSweepAndAccount() {
+  revalidatePath("/sweep");
+  revalidatePath("/net-worth");
+}
+
 export async function createCard(formData: FormData) {
   const { supabase, user } = await requireUser();
   const name = String(formData.get("name") ?? "").trim();
@@ -34,13 +42,14 @@ export async function createCard(formData: FormData) {
   const network = String(formData.get("network") ?? "").trim() || null;
   const color = String(formData.get("color") ?? "#1C1A17").trim() || "#1C1A17";
   const base_multiplier = Number(formData.get("base_multiplier") ?? 1);
+  const account_id = String(formData.get("account_id") ?? "") || null;
   if (!name) throw new Error("Name is required");
 
   const { error } = await supabase
     .from("cards")
-    .insert({ user_id: user.id, name, last4, network, color, base_multiplier });
+    .insert({ user_id: user.id, name, last4, network, color, base_multiplier, account_id });
   if (error) throw error;
-  revalidateSweep();
+  revalidateSweepAndAccount();
 }
 
 export async function updateCard(formData: FormData) {
@@ -58,7 +67,7 @@ export async function updateCard(formData: FormData) {
     .update({ name, last4, network, color, base_multiplier })
     .eq("id", id);
   if (error) throw error;
-  revalidateSweep();
+  revalidateSweepAndAccount();
 }
 
 export async function deleteCard(formData: FormData) {
@@ -66,7 +75,7 @@ export async function deleteCard(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   const { error } = await supabase.from("cards").delete().eq("id", id);
   if (error) throw error;
-  revalidateSweep();
+  revalidateSweepAndAccount();
 }
 
 // ---- Point multipliers ----
@@ -114,14 +123,18 @@ export async function deleteCardCharge(formData: FormData) {
 
 // ---- Sweeper: batch-quarantine pending charges into Forbidden Money ----
 
-export async function sweepPendingCharges() {
+/**
+ * Rev 05 §6: sweeps a specific set of pending charges rather than an
+ * implicit "everything" — "Select charges to sweep" step 1. With no `ids`
+ * given (bulk "Sweep now"), every pending charge sweeps, same as before.
+ */
+export async function sweepPendingCharges(formData?: FormData) {
   const { supabase, user } = await requireUser();
+  const ids = formData?.getAll("ids").map(String).filter(Boolean) ?? [];
 
-  const { data: pending, error: pendingError } = await supabase
-    .from("card_charges")
-    .select("*")
-    .eq("user_id", user.id)
-    .eq("swept", false);
+  let query = supabase.from("card_charges").select("*").eq("user_id", user.id).eq("swept", false);
+  if (ids.length > 0) query = query.in("id", ids);
+  const { data: pending, error: pendingError } = await query;
   if (pendingError) throw pendingError;
   if (!pending || pending.length === 0) return;
 
@@ -138,12 +151,12 @@ export async function sweepPendingCharges() {
 
   const total = pending.reduce((s, c) => s + c.amount, 0);
   const sweptAt = new Date().toISOString();
+  const sweptIds = pending.map((c) => c.id);
 
   const { error: updateChargesError } = await supabase
     .from("card_charges")
     .update({ swept: true, swept_at: sweptAt })
-    .eq("user_id", user.id)
-    .eq("swept", false);
+    .in("id", sweptIds);
   if (updateChargesError) throw updateChargesError;
 
   const { error: updateBucketError } = await supabase

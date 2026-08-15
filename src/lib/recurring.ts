@@ -8,6 +8,7 @@ export interface RecurringItemLike {
   day_of_month: number;
   active: boolean;
   category_id: string | null;
+  icon?: string | null;
 }
 
 export interface OccurrenceStateLike {

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { periodsForMonth } from "@/lib/periods";
+import { DEFAULT_CATEGORIES, lucideKey } from "@/lib/icons";
 
 type Client = Awaited<ReturnType<typeof createClient>>;
 
@@ -16,7 +17,7 @@ async function requireUser() {
 }
 
 function revalidateEverything() {
-  for (const path of ["/today", "/net-worth", "/expenses", "/income", "/budgets", "/sweep", "/history", "/settings"]) {
+  for (const path of ["/today", "/net-worth", "/expenses", "/income", "/sweep", "/history", "/settings"]) {
     revalidatePath(path);
   }
 }
@@ -84,10 +85,10 @@ function monthsAgo(from: Date, n: number): Date {
 }
 
 /**
- * The full realistic Rev 03 §0 dataset, force-written for `userId` —
- * doesn't check whether anything already exists first; `seedDemoData` (the
- * button) and `ensureDemoSeedIfNeeded` (the auto-reseed) both call this
- * after deciding it's time to write.
+ * The full realistic demo dataset, force-written for `userId` — doesn't
+ * check whether anything already exists first. Only ever called from the
+ * explicit "Load demo data" button (rev 05 §0: no more silent auto-reseed
+ * from page loads).
  */
 async function writeDemoDataset(supabase: Client, userId: string) {
   await wipeAllData(supabase, userId);
@@ -141,8 +142,8 @@ async function writeDemoDataset(supabase: Client, userId: string) {
   const accountsToInsert = [
     { name: "Checking", type: "Cash", balance: 3200 },
     { name: "HYSA", type: "HYSA", balance: 11500, apy_pct: 4.25 },
-    { name: "Buffer", type: "Cash", balance: 95, is_forbidden_money: true, icon: "🧺" },
-    { name: "Transit card", type: "Stored-value", balance: 8, icon: "🚊" },
+    { name: "Buffer", type: "Cash", balance: 95, is_forbidden_money: true, icon: lucideKey("wallet") },
+    { name: "Transit card", type: "Stored-value", balance: 8, icon: lucideKey("train") },
     {
       name: "HSA",
       type: "HSA",
@@ -265,18 +266,18 @@ async function writeDemoDataset(supabase: Client, userId: string) {
     },
   ]);
 
-  // ---- Categories ----
-  const categoriesToInsert = [
-    { name: "Bills", emoji: "🏠" },
-    { name: "Food", emoji: "🍔" },
-    { name: "Subscriptions", emoji: "📺" },
-    { name: "Amazon", emoji: "📦" },
-    { name: "Play", emoji: "🎮" },
-    { name: "Transit", emoji: "🚊" },
-  ];
+  // ---- Categories (rev 05 §9: the full preloaded default set) ----
   const { data: categories, error: catErr } = await supabase
     .from("categories")
-    .insert(categoriesToInsert.map((c, i) => ({ user_id: uid, sort_order: i, ...c })))
+    .insert(
+      DEFAULT_CATEGORIES.map((c, i) => ({
+        user_id: uid,
+        sort_order: i,
+        name: c.name,
+        emoji: c.icon,
+        color: c.color,
+      })),
+    )
     .select("id, name");
   if (catErr) throw catErr;
   const catByName = new Map(categories.map((c) => [c.name, c.id]));
@@ -297,7 +298,7 @@ async function writeDemoDataset(supabase: Client, userId: string) {
       {
         user_id: uid,
         name: "Groceries",
-        category_id: catByName.get("Food"),
+        category_id: catByName.get("Groceries"),
         amount: 400,
         is_variable: true,
         day_of_month: 5,
@@ -306,7 +307,7 @@ async function writeDemoDataset(supabase: Client, userId: string) {
       {
         user_id: uid,
         name: "Amazon Sub&Save",
-        category_id: catByName.get("Amazon"),
+        category_id: catByName.get("Shopping"),
         amount: 42,
         is_variable: true,
         day_of_month: 8,
@@ -345,8 +346,17 @@ async function writeDemoDataset(supabase: Client, userId: string) {
   const { data: cards, error: cardErr } = await supabase
     .from("cards")
     .insert([
-      { user_id: uid, name: "Amex Gold", last4: "1005", network: "amex", color: "#C9A227", base_multiplier: 1, icon: "🥇" },
-      { user_id: uid, name: "Chase Freedom", last4: "4242", network: "visa", color: "#0F4C9A", base_multiplier: 1, icon: "❄️" },
+      {
+        user_id: uid,
+        name: "Amex Gold",
+        last4: "1005",
+        network: "amex",
+        color: "#C9A227",
+        base_multiplier: 1,
+        icon: lucideKey("credit-card"),
+        account_id: acctByName.get("Credit card"),
+      },
+      { user_id: uid, name: "Chase Freedom", last4: "4242", network: "visa", color: "#0F4C9A", base_multiplier: 1, icon: lucideKey("credit-card") },
     ])
     .select("id, name");
   if (cardErr) throw cardErr;
@@ -355,7 +365,7 @@ async function writeDemoDataset(supabase: Client, userId: string) {
 
   await supabase.from("card_category_multipliers").insert([
     { user_id: uid, card_id: amex.id, category_id: catByName.get("Food"), multiplier: 4 },
-    { user_id: uid, card_id: freedom.id, category_id: catByName.get("Amazon"), multiplier: 5 },
+    { user_id: uid, card_id: freedom.id, category_id: catByName.get("Shopping"), multiplier: 5 },
   ]);
 
   // Amex is the channeling/buffer card the mock visual + Sweep point at.
@@ -379,7 +389,7 @@ async function writeDemoDataset(supabase: Client, userId: string) {
     {
       user_id: uid,
       card_id: freedom.id,
-      category_id: catByName.get("Amazon"),
+      category_id: catByName.get("Shopping"),
       name: "Amazon order",
       amount: 67.3,
       spent_on: iso(daysAgo(today, 2)),
@@ -400,16 +410,10 @@ async function writeDemoDataset(supabase: Client, userId: string) {
       name: "Amazon order",
       amount: 67.3,
       spent_on: iso(daysAgo(today, 2)),
-      category: "Amazon",
+      category: "Shopping",
       payment_source: "rewards_card",
       card_id: freedom.id,
     },
-  ]);
-
-  // ---- Budgets ----
-  await supabase.from("budgets").insert([
-    { user_id: uid, category: "Food", cap_amount: 200 },
-    { user_id: uid, category: "Play", cap_amount: 150 },
   ]);
 
   // ---- Market indices (ticker strip — hardcoded/plausible for demo) ----
@@ -555,38 +559,23 @@ async function writeDemoDataset(supabase: Client, userId: string) {
   }
 }
 
-/** The "Load demo data" button — always force-reseeds, regardless of what's already there. */
+/**
+ * The "Load demo data" button — always force-reseeds, regardless of what's
+ * already there. If any single insert fails partway through (network blip,
+ * a bad row), the account is left wiped-but-empty rather than half-seeded
+ * with dangling references — empty is safe (every screen already has an
+ * empty state); half-seeded is what caused the intermittent crash (rev 05
+ * §0.1) since a page could read data mid-rewrite. Not a real database
+ * transaction (Supabase's REST API doesn't expose one across calls like
+ * this), but it removes the worst failure mode.
+ */
 export async function seedDemoData() {
   const { supabase, user } = await requireUser();
-  await writeDemoDataset(supabase, user.id);
+  try {
+    await writeDemoDataset(supabase, user.id);
+  } catch (err) {
+    await wipeAllData(supabase, user.id).catch(() => {});
+    throw err;
+  }
   revalidateEverything();
-}
-
-/**
- * Auto-run on page load if the demo flag is on but the tables are empty —
- * covers the case where an earlier partial wipe (or a fresh Supabase
- * project the flag survived from) leaves the app looking permanently
- * blank instead of just re-seeding.
- */
-export async function ensureDemoSeedIfNeeded() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return;
-
-  const { data: settingsRow } = await supabase
-    .from("settings")
-    .select("demo_seeded")
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (!settingsRow?.demo_seeded) return;
-
-  const { count } = await supabase
-    .from("income_sources")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", user.id);
-  if (count && count > 0) return;
-
-  await writeDemoDataset(supabase, user.id);
 }

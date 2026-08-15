@@ -608,3 +608,24 @@ alter table purchases add column if not exists card_id uuid references cards on 
 alter table purchases drop constraint if exists purchases_payment_source_check;
 alter table purchases add constraint purchases_payment_source_check
   check (payment_source in ('checking', 'investing', 'stored_value', 'rewards_card'));
+
+-- ============================================================
+-- Moss — Revision 05
+-- ============================================================
+
+-- §1.2/§9: no more emoji — a category's `emoji` column (kept, unrenamed,
+-- to avoid a data migration) now holds either "lucide:<IconName>", a
+-- data: URI (custom upload), or is left null (falls back to an initial-
+-- letter circle). `color` is the category's tint, used for both the
+-- symbol circle and (already) the spending ring.
+alter table categories add column if not exists color text;
+
+-- §1.1: a bill's own left-column identity — same "lucide:<Name>" / data:
+-- URI / null convention as categories.emoji above.
+alter table recurring_items add column if not exists icon text;
+
+-- §4/§6: cards now live on Net worth, linked to the liability account they
+-- draw against (one card per account, toggled from the account's detail
+-- page) instead of Sweep's old standalone "Cards" section.
+alter table cards add column if not exists account_id uuid references accounts(id) on delete set null;
+create index if not exists cards_account_idx on cards (account_id);

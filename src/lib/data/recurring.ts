@@ -1,5 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
+import { DEFAULT_CATEGORIES } from "@/lib/icons";
 
+/**
+ * Rev 05 §9: a first-time user (no categories yet) gets the default set
+ * preloaded automatically — from there they're just rows the user can
+ * rename/recolor/delete like any other.
+ */
 export async function listCategories() {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -8,7 +14,19 @@ export async function listCategories() {
     .order("sort_order")
     .order("name");
   if (error) throw error;
-  return data;
+  if (data.length > 0) return data;
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return data;
+
+  const { data: inserted, error: insertError } = await supabase
+    .from("categories")
+    .insert(DEFAULT_CATEGORIES.map((c) => ({ user_id: user.id, name: c.name, emoji: c.icon, color: c.color })))
+    .select("*");
+  if (insertError) throw insertError;
+  return (inserted ?? []).slice().sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export async function listRecurringItems() {

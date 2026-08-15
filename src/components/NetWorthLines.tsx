@@ -1,5 +1,8 @@
+"use client";
+
+import { useRef, useState } from "react";
 import { smoothAreaPath, smoothBandPath, smoothLinePath, type Point } from "@/lib/svg-path";
-import { formatMonthLabel } from "@/lib/format";
+import { formatMonthLabel, formatMoney, formatShortDateLabel } from "@/lib/format";
 import type { HistoryPoint } from "@/lib/net-worth";
 
 interface Props {
@@ -17,7 +20,16 @@ function scale(points: HistoryPoint[], width: number, height: number, padLeft: n
   return { x, y, maxVal, innerH };
 }
 
+const WIDTH = 640;
+const HEIGHT = 220;
+const PAD_LEFT = 44;
+const PAD_BOTTOM = 24;
+
+/** Rev 05 §1.11: every graph fills its card and is hoverable — a vertical guide + tooltip at the nearest point. */
 export function NetWorthLines({ points, variant = "full" }: Props) {
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+
   if (points.length === 0) {
     return variant === "spark" ? (
       <div className="flex h-[52px] w-[110px] items-center justify-center text-[11px] text-ink-3">
@@ -44,11 +56,7 @@ export function NetWorthLines({ points, variant = "full" }: Props) {
     );
   }
 
-  const width = 640;
-  const height = 220;
-  const padLeft = 44;
-  const padBottom = 24;
-  const { x, y, maxVal, innerH } = scale(points, width, height, padLeft, padBottom);
+  const { x, y, maxVal, innerH } = scale(points, WIDTH, HEIGHT, PAD_LEFT, PAD_BOTTOM);
 
   const marketPts: Point[] = points.map((p, i) => [x(i), y(p.marketValue)]);
   const contribPts: Point[] = points.map((p, i) => [x(i), y(p.contributed)]);
@@ -56,8 +64,6 @@ export function NetWorthLines({ points, variant = "full" }: Props) {
 
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round((maxVal * f) / 1000));
 
-  // Label roughly 4-6 evenly spaced points along the x-axis by month,
-  // collapsing repeats so a short history doesn't print "Jan Jan Jan".
   const labelCount = Math.min(6, points.length);
   const rawLabelIdx = Array.from({ length: labelCount }, (_, i) =>
     Math.round((i / Math.max(1, labelCount - 1)) * (points.length - 1)),
@@ -70,47 +76,113 @@ export function NetWorthLines({ points, variant = "full" }: Props) {
     return true;
   });
 
+  function handleMove(e: React.MouseEvent<SVGSVGElement>) {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const relX = (e.clientX - rect.left) / rect.width;
+    const viewX = relX * WIDTH;
+    // Nearest point by x-position.
+    let nearest = 0;
+    let best = Infinity;
+    for (let i = 0; i < points.length; i++) {
+      const d = Math.abs(x(i) - viewX);
+      if (d < best) {
+        best = d;
+        nearest = i;
+      }
+    }
+    setHoverIdx(nearest);
+  }
+
+  const hovered = hoverIdx != null ? points[hoverIdx] : null;
+  const tooltipLeft = hoverIdx != null ? (x(hoverIdx) / WIDTH) * 100 : 0;
+  const flipTooltip = tooltipLeft > 65;
+
   return (
-    <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} className="overflow-visible">
-      {ticks.map((t, i) => (
-        <text
-          key={i}
-          x={0}
-          y={y(t * 1000) + 4}
-          style={{ fontSize: 11, fill: "var(--color-ink-3)", fontFamily: "var(--font-inter)" }}
+    <div className="relative w-full">
+      <svg
+        ref={svgRef}
+        width="100%"
+        height={HEIGHT}
+        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+        className="overflow-visible"
+        onMouseMove={handleMove}
+        onMouseLeave={() => setHoverIdx(null)}
+      >
+        {ticks.map((t, i) => (
+          <text
+            key={i}
+            x={0}
+            y={y(t * 1000) + 4}
+            style={{ fontSize: 11, fill: "var(--color-ink-3)", fontFamily: "var(--font-inter)" }}
+          >
+            ${t}k
+          </text>
+        ))}
+
+        <path
+          d={smoothAreaPath(contribPts, baselineY)}
+          fill="var(--color-contributed)"
+          opacity={0.1}
+          stroke="none"
+        />
+        <path d={smoothBandPath(marketPts, contribPts)} fill="var(--color-good)" opacity={0.13} stroke="none" />
+
+        <path
+          d={smoothLinePath(contribPts)}
+          fill="none"
+          stroke="var(--color-contributed)"
+          strokeWidth={2}
+          strokeDasharray="5 4"
+        />
+        <path d={smoothLinePath(marketPts)} fill="none" stroke="var(--color-good)" strokeWidth={2} />
+
+        {labelIdx.map((i) => (
+          <text
+            key={i}
+            x={x(i)}
+            y={HEIGHT - 4}
+            textAnchor="middle"
+            style={{ fontSize: 11, fill: "var(--color-ink-3)", fontFamily: "var(--font-inter)" }}
+          >
+            {formatMonthLabel(points[i].date)}
+          </text>
+        ))}
+
+        {hoverIdx != null && (
+          <>
+            <line
+              x1={x(hoverIdx)}
+              x2={x(hoverIdx)}
+              y1={0}
+              y2={innerH}
+              stroke="var(--color-border-strong)"
+              strokeWidth={1}
+            />
+            <circle cx={x(hoverIdx)} cy={y(points[hoverIdx].marketValue)} r={3.5} fill="var(--color-good)" />
+            <circle cx={x(hoverIdx)} cy={y(points[hoverIdx].contributed)} r={3.5} fill="var(--color-contributed)" />
+          </>
+        )}
+      </svg>
+
+      {hovered && (
+        <div
+          className="pointer-events-none absolute top-0 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[12px] shadow-lg"
+          style={{
+            left: `${tooltipLeft}%`,
+            transform: flipTooltip ? "translateX(-100%)" : "translateX(8px)",
+          }}
         >
-          ${t}k
-        </text>
-      ))}
-
-      <path
-        d={smoothAreaPath(contribPts, baselineY)}
-        fill="var(--color-contributed)"
-        opacity={0.1}
-        stroke="none"
-      />
-      <path d={smoothBandPath(marketPts, contribPts)} fill="var(--color-good)" opacity={0.13} stroke="none" />
-
-      <path
-        d={smoothLinePath(contribPts)}
-        fill="none"
-        stroke="var(--color-contributed)"
-        strokeWidth={2}
-        strokeDasharray="5 4"
-      />
-      <path d={smoothLinePath(marketPts)} fill="none" stroke="var(--color-good)" strokeWidth={2} />
-
-      {labelIdx.map((i) => (
-        <text
-          key={i}
-          x={x(i)}
-          y={height - 4}
-          textAnchor="middle"
-          style={{ fontSize: 11, fill: "var(--color-ink-3)", fontFamily: "var(--font-inter)" }}
-        >
-          {formatMonthLabel(points[i].date)}
-        </text>
-      ))}
-    </svg>
+          <p className="text-ink-3">{formatShortDateLabel(hovered.date)}</p>
+          <p className="text-ink">
+            <span className="text-good">●</span> {formatMoney(hovered.marketValue)}
+          </p>
+          <p className="text-ink-2">
+            <span className="text-contributed">●</span> {formatMoney(hovered.contributed)}
+          </p>
+        </div>
+      )}
+    </div>
   );
 }

@@ -4,11 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { computeRingLayout } from "@/lib/ring-layout";
 import { candyColorsForCategories } from "@/lib/candy-colors";
 import { formatCompactMoney, formatMoney } from "@/lib/format";
-import { IconGlyph } from "@/components/IconGlyph";
+import { IconCircle } from "@/components/IconCircle";
 
 export interface RingCategory {
   name: string;
-  emoji: string;
+  icon: string;
   amount: number;
 }
 
@@ -96,7 +96,6 @@ export function SpendingRing({ data }: { data: RingCategory[] }) {
         role="img"
         aria-label={`Where it goes: ${formatMoney(total)} spent this period`}
       >
-        <circle cx={cx} cy={cy} r={radius} fill="none" stroke="var(--color-card-soft)" strokeWidth={STROKE} />
         {segments.map((seg) => (
           <circle
             key={seg.name}
@@ -142,7 +141,7 @@ export function SpendingRing({ data }: { data: RingCategory[] }) {
                 className="inline-block h-2.5 w-2.5 rounded-full"
                 style={{ background: legendColors.get(d.name) }}
               />
-              <IconGlyph value={d.emoji} className="text-[13px]" />
+              <IconCircle value={d.icon} label={d.name} variant="tinted" size="sm" />
               {d.name}
             </span>
             <span className="font-display text-[13.5px] font-medium text-ink">

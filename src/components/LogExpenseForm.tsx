@@ -16,14 +16,21 @@ interface CardOption {
   name: string;
 }
 
+interface CategoryOption {
+  id: string;
+  name: string;
+}
+
 export function LogExpenseForm({
   investingAccounts,
   storedValueAccounts,
   cards = [],
+  categories = [],
 }: {
   investingAccounts: AccountOption[];
   storedValueAccounts: AccountOption[];
   cards?: CardOption[];
+  categories?: CategoryOption[];
 }) {
   const [source, setSource] = useState<PaymentSource>("checking");
 
@@ -43,12 +50,19 @@ export function LogExpenseForm({
           type="date"
           name="spent_on"
           defaultValue={new Date().toISOString().slice(0, 10)}
+          style={{ colorScheme: "light" }}
           className={INPUT}
         />
       </label>
       <label className={LABEL}>
         Category
-        <input name="category" defaultValue="Play" className={`w-28 ${INPUT}`} />
+        <select name="category" defaultValue={categories[0]?.name ?? ""} className={`w-32 ${INPUT}`}>
+          {categories.map((c) => (
+            <option key={c.id} value={c.name}>
+              {c.name}
+            </option>
+          ))}
+        </select>
       </label>
       <label className={LABEL}>
         Paid with

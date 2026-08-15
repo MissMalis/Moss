@@ -11,8 +11,10 @@ import { formatMoney, describeFrequency, formatShortDateLabel } from "@/lib/form
 import { IncomeSourceForm } from "@/components/IncomeSourceForm";
 import { AddButton } from "@/components/AddButton";
 import { RowMenu } from "@/components/RowMenu";
+import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
 import { EmptyState } from "@/components/EmptyState";
 import { Tooltip } from "@/components/Tooltip";
+import { lucideKey } from "@/lib/icons";
 import { BTN_SOLID, CARD, CARD_HEADER, INPUT, LABEL, ROW } from "@/lib/ui";
 
 export default async function IncomePage() {
@@ -46,7 +48,7 @@ export default async function IncomePage() {
         <div className="mt-4 space-y-2">
           {incomeSources.length === 0 && (
             <EmptyState
-              emoji="💵"
+              icon={lucideKey("wallet")}
               title="No income yet"
               hint="Add a paycheck, a side gig, or a one-time deposit above."
             />
@@ -107,10 +109,7 @@ export default async function IncomePage() {
                       },
                     ]}
                   >
-                    <form action={deleteIncomeSource}>
-                      <input type="hidden" name="id" value={s.id} />
-                      <button type="submit">Remove</button>
-                    </form>
+                    <ConfirmDeleteButton action={deleteIncomeSource} hiddenFields={{ id: s.id }} itemLabel={s.name} variant="link" />
                   </RowMenu>
                 </div>
               </div>
@@ -195,7 +194,7 @@ export default async function IncomePage() {
 
         <div className="mt-4 space-y-2">
           {deductions.length === 0 && (
-            <EmptyState emoji="🏦" title="No contributions set up yet" />
+            <EmptyState icon={lucideKey("landmark")} title="No contributions set up yet" />
           )}
           {deductions.map((d) => {
             const source = incomeSources.find((s) => s.id === d.income_source_id);
@@ -226,14 +225,14 @@ export default async function IncomePage() {
                                 step="0.01"
                                 name="amount"
                                 defaultValue={d.amount}
-                                className={`flex-1 ${INPUT}`}
+                                className={`min-w-0 flex-1 ${INPUT}`}
                               />
                               <input
                                 type="number"
                                 step="0.01"
                                 name="employer_match"
                                 defaultValue={d.employer_match}
-                                className={`flex-1 ${INPUT}`}
+                                className={`min-w-0 flex-1 ${INPUT}`}
                               />
                             </div>
                             <select name="tax_treatment" defaultValue={d.tax_treatment} className={INPUT}>
@@ -256,10 +255,7 @@ export default async function IncomePage() {
                       },
                     ]}
                   >
-                    <form action={deleteDeduction}>
-                      <input type="hidden" name="id" value={d.id} />
-                      <button type="submit">Remove</button>
-                    </form>
+                    <ConfirmDeleteButton action={deleteDeduction} hiddenFields={{ id: d.id }} itemLabel={d.name} variant="link" />
                   </RowMenu>
                 </div>
               </div>

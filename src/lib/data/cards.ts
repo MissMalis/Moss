@@ -7,6 +7,13 @@ export async function listCards() {
   return data;
 }
 
+export async function getCardForAccount(accountId: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("cards").select("*").eq("account_id", accountId).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
 export async function listCardMultipliers() {
   const supabase = await createClient();
   const { data, error } = await supabase.from("card_category_multipliers").select("*");

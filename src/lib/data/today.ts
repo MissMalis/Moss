@@ -18,14 +18,15 @@ import { listTransfersInRange } from "@/lib/data/transfers";
 import { transfersSafeToSpendImpact } from "@/lib/transfers";
 import { reconciliationStatus } from "@/lib/cards";
 import { buildReviewChecklist, type ReviewItem } from "@/lib/checklist";
+import { lucideKey } from "@/lib/icons";
 
 const CHECKLIST_LOOKBACK_DAYS = 45;
 
-const DEFAULT_CATEGORY_EMOJI = "💳";
+const DEFAULT_CATEGORY_ICON = lucideKey("credit-card");
 
 export interface SpendingCategory {
   name: string;
-  emoji: string;
+  icon: string;
   amount: number;
 }
 
@@ -277,7 +278,7 @@ export async function getTodaySnapshot(): Promise<TodaySnapshot> {
     .map(([name, amount]) => ({
       name,
       amount,
-      emoji: categoriesByName.get(name)?.emoji ?? DEFAULT_CATEGORY_EMOJI,
+      icon: categoriesByName.get(name)?.emoji ?? DEFAULT_CATEGORY_ICON,
     }))
     .sort((a, b) => b.amount - a.amount);
 

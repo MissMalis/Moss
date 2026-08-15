@@ -3,25 +3,84 @@ import { listAccounts, listHoldings, ACCOUNT_TYPES } from "@/lib/data/accounts";
 import { ensureSnapshotsForToday, listAllSnapshots } from "@/lib/data/net-worth-snapshots";
 import {
   computeNetWorth,
-  accountEmoji,
   accountTypeLabel,
   accountGroup,
   aggregateSnapshots,
-  type HistoryPoint,
 } from "@/lib/net-worth";
 import { createAccount } from "@/lib/actions/accounts";
 import { Money } from "@/components/Money";
 import { NetWorthHero } from "@/components/NetWorthHero";
-import { NetWorthLines } from "@/components/NetWorthLines";
+import { IconCircle } from "@/components/IconCircle";
 import { AddButton } from "@/components/AddButton";
-import { EmojiPicker } from "@/components/EmojiPicker";
-import { IconGlyph } from "@/components/IconGlyph";
+import { IconPicker } from "@/components/IconPicker";
 import { Collapsible } from "@/components/Collapsible";
+import { MoveMoneyButton } from "@/components/MoveMoneyButton";
 import { EmptyState } from "@/components/EmptyState";
 import { Tooltip } from "@/components/Tooltip";
-import { BTN_SOLID, CARD, CARD_HEADER, INPUT, LABEL, ROW } from "@/lib/ui";
+import { lucideKey } from "@/lib/icons";
+import { BTN_SOLID, CARD, CARD_HEADER, INPUT, LABEL } from "@/lib/ui";
 
-const GROUPS = ["Investments", "Cash", "Liabilities"] as const;
+// Rev 05 §4: Rocket-Money nested model — one "Assets" parent whose group
+// rows are Investments/Cash, one "Liabilities" parent whose one group is
+// Debt. Same nested-card pattern on both sides.
+const ASSET_SUBGROUPS = ["Investments", "Cash"] as const;
+
+type AccountRowData = { id: string; name: string; icon: string | null; type: string; apr_pct: number | null; apy_pct: number | null };
+
+function AccountRow({ a, value }: { a: AccountRowData; value: number }) {
+  return (
+    <Link
+      href={`/net-worth/${a.id}`}
+      className="flex items-center gap-3 rounded-lg px-2 py-2 transition hover:bg-card-soft"
+    >
+      <IconCircle value={a.icon} label={a.name} variant="solid" size="sm" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[14px] text-ink">{a.name}</p>
+        <p className="truncate text-[12px] text-ink-3">
+          {accountTypeLabel(a.type)}
+          {a.type === "Liabilities" && a.apr_pct ? ` · ${a.apr_pct}% APR` : ""}
+          {a.type === "HYSA" && a.apy_pct ? ` · ${a.apy_pct}% APY` : ""}
+        </p>
+      </div>
+      <Money value={value} size="card" />
+    </Link>
+  );
+}
+
+function GroupRow({
+  label,
+  total,
+  pct,
+  pctLabel,
+  accountsInGroup,
+  valueById,
+}: {
+  label: string;
+  total: number;
+  pct: number;
+  pctLabel: "assets" | "liabilities";
+  accountsInGroup: AccountRowData[];
+  valueById: Map<string, number>;
+}) {
+  return (
+    <Collapsible
+      summary={
+        <div className="flex flex-1 items-center justify-between gap-3 py-2">
+          <p className="text-[13.5px] font-medium text-ink">
+            {label} <span className="font-normal text-ink-3">· {pct}% of {pctLabel}</span>
+          </p>
+          <Money value={total} size="card" />
+        </div>
+      }
+    >
+      <div className="space-y-0.5 pb-2 pl-1">
+        {accountsInGroup.map((a) => (
+          <AccountRow key={a.id} a={a} value={valueById.get(a.id) ?? 0} />
+        ))}
+      </div>
+    </Collapsible>
+  );
+}
 
 export default async function NetWorthPage() {
   const [accounts, holdings] = await Promise.all([listAccounts(), listHoldings()]);
@@ -38,56 +97,30 @@ export default async function NetWorthPage() {
     })),
   );
 
-  const holdingsByAccount = new Map<string, typeof holdings>();
-  for (const h of holdings) {
-    if (!h.account_id) continue;
-    holdingsByAccount.set(h.account_id, [...(holdingsByAccount.get(h.account_id) ?? []), h]);
-  }
-  const snapshotsByAccount = new Map<string, HistoryPoint[]>();
-  for (const s of snapshots) {
-    const list = snapshotsByAccount.get(s.account_id) ?? [];
-    list.push({ date: s.snapshot_date, contributed: s.contributed, marketValue: s.market_value });
-    snapshotsByAccount.set(s.account_id, list);
-  }
+  const valueById = new Map(netWorth.accounts.map((av) => [av.id, av.value]));
+  const assetsTotal = ASSET_SUBGROUPS.reduce(
+    (sum, g) => sum + accounts.filter((a) => accountGroup(a.type) === g).reduce((s, a) => s + (valueById.get(a.id) ?? 0), 0),
+    0,
+  );
+  const liabilitiesAccounts = accounts.filter((a) => accountGroup(a.type) === "Liabilities");
+  const liabilitiesTotal = liabilitiesAccounts.reduce((s, a) => s + Math.abs(valueById.get(a.id) ?? 0), 0);
 
-  function AccountRow({ a }: { a: (typeof accounts)[number] }) {
-    const accountHoldings = holdingsByAccount.get(a.id) ?? [];
-    const trackable = accountGroup(a.type) === "Investments" || accountHoldings.length > 0;
-    const series = snapshotsByAccount.get(a.id) ?? [];
-    const value = netWorth.accounts.find((av) => av.id === a.id)?.value ?? a.balance;
-
-    return (
-      <Link href={`/net-worth/${a.id}`} className={`${ROW} flex items-center justify-between gap-4 transition hover:border-border-strong`}>
-        <div className="flex items-center gap-3">
-          <IconGlyph value={a.icon} fallback={accountEmoji(a.type)} className="text-[20px]" />
-          <div>
-            <p className="text-[14px] text-ink">{a.name}</p>
-            <p className="text-[12px] text-ink-3">
-              {accountTypeLabel(a.type)}
-              {a.type === "Liabilities" && a.apr_pct ? ` · ${a.apr_pct}% APR` : ""}
-              {a.type === "HYSA" && a.apy_pct ? ` · ${a.apy_pct}% APY` : ""}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-4">
-          {trackable && series.length > 1 && <NetWorthLines points={series} variant="spark" />}
-          <Money value={value} size="card" />
-        </div>
-      </Link>
-    );
-  }
+  const transferAccounts = accounts.map((a) => ({ id: a.id, name: a.name }));
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center justify-end">
+        <MoveMoneyButton accounts={transferAccounts} />
+      </div>
+
       <NetWorthHero total={netWorth.total} points={historyPoints} />
 
-      <div className="flex items-center justify-between">
-        <p className={CARD_HEADER}>Accounts</p>
+      <div className="flex items-center justify-end gap-3">
         <AddButton label="Add account">
           <form action={createAccount} className="flex flex-wrap items-end gap-3">
             <label className={LABEL}>
               Icon
-              <EmojiPicker name="icon" />
+              <IconPicker name="icon" />
             </label>
             <label className={LABEL}>
               Name
@@ -150,23 +183,54 @@ export default async function NetWorthPage() {
       </div>
 
       {accounts.length === 0 ? (
-        <EmptyState emoji="🏦" title="No accounts yet" hint="Add your first one above." />
+        <EmptyState icon={lucideKey("landmark")} title="No accounts yet" hint="Add your first one above." />
       ) : (
-        GROUPS.map((group) => {
-          const inGroup = accounts.filter((a) => accountGroup(a.type) === group);
-          if (inGroup.length === 0) return null;
-          return (
-            <div key={group} className={CARD}>
-              <Collapsible defaultOpen summary={<p className={CARD_HEADER}>{group}</p>}>
-                <div className="mt-3 space-y-2">
-                  {inGroup.map((a) => (
-                    <AccountRow key={a.id} a={a} />
-                  ))}
-                </div>
-              </Collapsible>
+        <>
+          <div className={CARD}>
+            <div className="flex items-center justify-between">
+              <p className={CARD_HEADER}>Assets</p>
+              <Money value={assetsTotal} size="card" />
             </div>
-          );
-        })
+            <div className="mt-2 divide-y divide-border">
+              {ASSET_SUBGROUPS.map((group) => {
+                const inGroup = accounts.filter((a) => accountGroup(a.type) === group);
+                if (inGroup.length === 0) return null;
+                const groupTotal = inGroup.reduce((s, a) => s + (valueById.get(a.id) ?? 0), 0);
+                const pct = assetsTotal > 0 ? Math.round((Math.abs(groupTotal) / assetsTotal) * 100) : 0;
+                return (
+                  <GroupRow
+                    key={group}
+                    label={group}
+                    total={groupTotal}
+                    pct={pct}
+                    pctLabel="assets"
+                    accountsInGroup={inGroup}
+                    valueById={valueById}
+                  />
+                );
+              })}
+            </div>
+          </div>
+
+          {liabilitiesAccounts.length > 0 && (
+            <div className={CARD}>
+              <div className="flex items-center justify-between">
+                <p className={CARD_HEADER}>Liabilities</p>
+                <Money value={-liabilitiesTotal} size="card" />
+              </div>
+              <div className="mt-2 divide-y divide-border">
+                <GroupRow
+                  label="Debt"
+                  total={-liabilitiesTotal}
+                  pct={100}
+                  pctLabel="liabilities"
+                  accountsInGroup={liabilitiesAccounts}
+                  valueById={valueById}
+                />
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

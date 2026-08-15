@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Leaf, X } from "lucide-react";
 import { AdvisorPanel } from "@/components/AdvisorPanel";
 
 export function FloatingAskMoss({ geminiConnected }: { geminiConnected: boolean }) {
@@ -18,7 +19,7 @@ export function FloatingAskMoss({ geminiConnected }: { geminiConnected: boolean 
               aria-label="Close"
               className="text-ink-3 hover:text-ink"
             >
-              ×
+              <X size={16} />
             </button>
           </div>
           {geminiConnected ? (
@@ -36,7 +37,7 @@ export function FloatingAskMoss({ geminiConnected }: { geminiConnected: boolean 
         aria-label={open ? "Close Ask Moss" : "Open Ask Moss"}
         className="flex h-12 w-12 items-center justify-center rounded-full bg-ink text-bg transition hover:opacity-85"
       >
-        {open ? "×" : "🌱"}
+        {open ? <X size={20} /> : <Leaf size={20} />}
       </button>
     </div>
   );

@@ -10,9 +10,10 @@ import { SpendingRing } from "@/components/SpendingRing";
 import { EmptyState } from "@/components/EmptyState";
 import { CARD, CARD_HEADER, SCROLL_LIST } from "@/lib/ui";
 import { groupByDate, type TransactionLike } from "@/lib/recent-transactions";
+import { lucideKey } from "@/lib/icons";
 
 const INVESTING_TYPES = new Set(["HSA", "401(k)", "Roth IRA", "Traditional IRA", "Taxable Brokerage"]);
-const DEFAULT_CATEGORY_EMOJI = "💳";
+const DEFAULT_CATEGORY_ICON = lucideKey("credit-card");
 
 function currentMonthWindow() {
   const now = new Date();
@@ -51,7 +52,7 @@ export default async function LogExpensePage() {
   }
   const spendingByCategory = Array.from(byCategory.entries())
     .filter(([, amount]) => amount > 0)
-    .map(([name, amount]) => ({ name, amount, emoji: categoriesById.get(name)?.emoji ?? DEFAULT_CATEGORY_EMOJI }))
+    .map(([name, amount]) => ({ name, amount, icon: categoriesById.get(name)?.emoji ?? DEFAULT_CATEGORY_ICON }))
     .sort((a, b) => b.amount - a.amount);
 
   const transactions: TransactionLike[] = purchases.map((p) => ({
@@ -73,6 +74,7 @@ export default async function LogExpensePage() {
             investingAccounts={investingAccounts}
             storedValueAccounts={storedValueAccounts}
             cards={cards.map((c) => ({ id: c.id, name: c.name }))}
+            categories={categories.map((c) => ({ id: c.id, name: c.name }))}
           />
         </div>
       </div>
@@ -82,7 +84,7 @@ export default async function LogExpensePage() {
           <p className={CARD_HEADER}>This month</p>
           {groups.length === 0 ? (
             <div className="mt-3">
-              <EmptyState emoji="🧋" title="Nothing logged this month yet" />
+              <EmptyState icon={lucideKey("receipt")} title="Nothing logged this month yet" />
             </div>
           ) : (
             <div className={`mt-3 ${SCROLL_LIST}`}>

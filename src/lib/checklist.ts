@@ -1,4 +1,5 @@
 import { formatMoney } from "@/lib/format";
+import { lucideKey } from "@/lib/icons";
 
 const INVESTABLE_TYPES = new Set(["HSA", "401(k)", "Roth IRA", "Traditional IRA", "Taxable Brokerage"]);
 const LOW_STORED_VALUE_THRESHOLD = 10;
@@ -20,9 +21,12 @@ export interface ReviewAccountLike {
 
 export interface ReviewItem {
   id: string;
-  emoji: string;
-  message: string;
+  /** "lucide:<key>" — rev 05 §1.2, no emoji anywhere in the UI. */
+  icon: string;
+  /** Line 1 on Dashboard's Alerts card — the task, e.g. "Update balance". */
   actionLabel: string;
+  /** Line 2 — the detail. Never repeats actionLabel (no em-dash joining the two). */
+  message: string;
   href: string;
 }
 
@@ -58,9 +62,9 @@ export function buildReviewChecklist(params: {
         const amount = trigger ?? Math.abs(floor - a.balance);
         items.push({
           id: `oversold-${a.id}`,
-          emoji: "🔎",
-          message: `A ${formatMoney(amount)} charge on ${a.name} likely triggered an auto-sell`,
+          icon: lucideKey("search"),
           actionLabel: "Review holdings",
+          message: `A ${formatMoney(amount)} charge on ${a.name} likely triggered an auto-sell`,
           href: `/net-worth/${a.id}`,
         });
       } else if (a.is_system && a.hasHoldings && a.balance > 0) {
@@ -70,9 +74,9 @@ export function buildReviewChecklist(params: {
         // case above doesn't already apply — that one's more urgent.
         items.push({
           id: `uninvested-${a.id}`,
-          emoji: "🌱",
-          message: `${formatMoney(a.balance)} contributed to your ${a.name} since you last updated positions`,
+          icon: lucideKey("leaf"),
           actionLabel: "Review holdings",
+          message: `${formatMoney(a.balance)} contributed to your ${a.name} since you last updated positions`,
           href: `/net-worth/${a.id}`,
         });
       }
@@ -85,9 +89,9 @@ export function buildReviewChecklist(params: {
         if (staleDays >= STALE_BALANCE_DAYS) {
           items.push({
             id: `stale-balance-${a.id}`,
-            emoji: "🔄",
-            message: `Update balance — your ${a.name} lump hasn't been refreshed in ${staleDays} days`,
+            icon: lucideKey("refresh-cw"),
             actionLabel: "Update balance",
+            message: `Update balance — your ${a.name} lump hasn't been refreshed in ${staleDays} days`,
             href: `/net-worth/${a.id}`,
           });
         }
@@ -97,9 +101,9 @@ export function buildReviewChecklist(params: {
     if (a.type === "Stored-value" && a.balance < LOW_STORED_VALUE_THRESHOLD) {
       items.push({
         id: `low-stored-${a.id}`,
-        emoji: "💳",
-        message: `Reload — ${a.name} is down to ${formatMoney(a.balance)}`,
+        icon: lucideKey("credit-card"),
         actionLabel: "Reload",
+        message: `Reload — ${a.name} is down to ${formatMoney(a.balance)}`,
         href: "/expenses",
       });
     }
@@ -110,17 +114,17 @@ export function buildReviewChecklist(params: {
       if (remaining < 0) {
         items.push({
           id: `over-limit-${a.id}`,
-          emoji: "⚠️",
-          message: `${a.name} is ${formatMoney(Math.abs(remaining))} over its ${formatMoney(a.annual_contribution_limit)} contribution limit`,
+          icon: lucideKey("alert-triangle"),
           actionLabel: "Review",
+          message: `${a.name} is ${formatMoney(Math.abs(remaining))} over its ${formatMoney(a.annual_contribution_limit)} contribution limit`,
           href: `/net-worth/${a.id}`,
         });
       } else if (remaining <= a.annual_contribution_limit * LIMIT_PROXIMITY_FRACTION) {
         items.push({
           id: `near-limit-${a.id}`,
-          emoji: "📈",
-          message: `${a.name} has ${formatMoney(remaining)} left before its contribution limit`,
+          icon: lucideKey("trending-up"),
           actionLabel: "Review",
+          message: `${a.name} has ${formatMoney(remaining)} left before its contribution limit`,
           href: `/net-worth/${a.id}`,
         });
       }
@@ -130,9 +134,9 @@ export function buildReviewChecklist(params: {
   if (params.bufferAccountName && params.bufferShortBy > 0) {
     items.push({
       id: "buffer-short",
-      emoji: "🧹",
-      message: `${params.bufferAccountName} is short ${formatMoney(params.bufferShortBy)} against what's been swept`,
+      icon: lucideKey("arrow-left-right"),
       actionLabel: "Reconcile",
+      message: `${params.bufferAccountName} is short ${formatMoney(params.bufferShortBy)} against what's been swept`,
       href: "/sweep",
     });
   }

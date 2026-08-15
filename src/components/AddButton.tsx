@@ -1,12 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { BTN_SOLID, CARD } from "@/lib/ui";
+import { Modal } from "@/components/Modal";
 
 /**
- * Rev 03 §6: "Add a ___" is always a button, never a toggle/disclosure. A
- * real <button> that reveals its form — not a <details>/<summary> pair,
- * which reads as a disclosure widget rather than an action.
+ * Rev 05 §1.5: "Add ___" always opens a real modal popup — never an inline
+ * expanding panel. Same external API as before (label + children), so
+ * every existing call site upgraded automatically.
  */
 export function AddButton({
   label,
@@ -15,25 +14,9 @@ export function AddButton({
   label: string;
   children: React.ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
-
-  if (!open) {
-    return (
-      <button type="button" onClick={() => setOpen(true)} className={BTN_SOLID}>
-        {label}
-      </button>
-    );
-  }
-
   return (
-    <div className={CARD}>
-      <div className="flex items-center justify-between">
-        <p className="text-[13px] text-ink-2">{label}</p>
-        <button type="button" onClick={() => setOpen(false)} className="text-[13px] text-ink-3 hover:text-ink">
-          Cancel
-        </button>
-      </div>
-      <div className="mt-3">{children}</div>
-    </div>
+    <Modal label={label} title={label}>
+      {children}
+    </Modal>
   );
 }

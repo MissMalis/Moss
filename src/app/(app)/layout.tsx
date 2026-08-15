@@ -2,18 +2,16 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/lib/actions/auth";
 import { getSettings } from "@/lib/data/settings";
-import { listAccounts } from "@/lib/data/accounts";
-import { ensureDemoSeedIfNeeded } from "@/lib/actions/demo";
 import { FloatingAskMoss } from "@/components/FloatingAskMoss";
 import { NavLinks } from "@/components/NavLinks";
-import { MoveMoneyButton } from "@/components/MoveMoneyButton";
 
+// Rev 05 §2: Dashboard (renamed from Today), Budgets removed, Move money
+// relocated into Net worth (§4) instead of living in the global header.
 const NAV = [
-  { href: "/today", label: "Today" },
+  { href: "/today", label: "Dashboard" },
   { href: "/net-worth", label: "Net worth" },
-  { href: "/expenses", label: "Expenses" },
   { href: "/income", label: "Income" },
-  { href: "/budgets", label: "Budgets" },
+  { href: "/expenses", label: "Expenses" },
   { href: "/sweep", label: "Sweep" },
   { href: "/history", label: "History" },
   { href: "/settings", label: "Settings" },
@@ -27,11 +25,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   if (!user) redirect("/login");
 
-  // §0: if the demo flag is on but the tables came back empty (a partial
-  // wipe, a fresh project), reseed before anything renders — never a
-  // permanently-blank app.
-  await ensureDemoSeedIfNeeded();
-  const [settings, accounts] = await Promise.all([getSettings(), listAccounts()]);
+  // Rev 05 §0: this used to auto-reseed demo data on every page load if the
+  // flag was set but a table came back empty. That's a ~20-step wipe-then-
+  // reinsert with no database transaction around it — running it as a side
+  // effect of navigation meant a concurrent page render could read the
+  // account mid-rewrite (some tables cleared, not yet repopulated) and
+  // crash. Recovery is now only ever triggered by the explicit "Load demo
+  // data" button (Settings), never silently from a page load.
+  const settings = await getSettings();
 
   return (
     <div className="min-h-screen flex flex-col bg-bg">
@@ -40,7 +41,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <span className="font-display text-xl font-medium text-ink">moss</span>
           <nav className="flex items-center gap-6 text-[13.5px] text-ink-2">
             <NavLinks items={NAV} />
-            <MoveMoneyButton accounts={accounts.map((a) => ({ id: a.id, name: a.name }))} />
             <form action={signOut}>
               <button type="submit" className="transition hover:text-ink">
                 Sign out
