@@ -177,4 +177,33 @@ describe("buildReviewChecklist", () => {
     });
     expect(items).toHaveLength(0);
   });
+
+  it("nudges to review 401(k) settings after a recent paycheck change", () => {
+    const items = buildReviewChecklist({
+      accounts: [account({ id: "a1", name: "401(k)", type: "401(k)", balance: 5000 })],
+      ...noContext,
+      lastIncomeChangeISO: "2026-08-05",
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0].message).toBe("Your paycheck amount changed 8 days ago — check salary and contribution % on your 401(k)");
+    expect(items[0].href).toBe("/net-worth");
+  });
+
+  it("does not nudge once the income-change window has passed", () => {
+    const items = buildReviewChecklist({
+      accounts: [account({ id: "a1", name: "401(k)", type: "401(k)", balance: 5000 })],
+      ...noContext,
+      lastIncomeChangeISO: "2026-07-01",
+    });
+    expect(items).toHaveLength(0);
+  });
+
+  it("does not nudge without a 401(k) account, even after a recent change", () => {
+    const items = buildReviewChecklist({
+      accounts: [account({ id: "a1", name: "Roth IRA", type: "Roth IRA", balance: 5000 })],
+      ...noContext,
+      lastIncomeChangeISO: "2026-08-10",
+    });
+    expect(items).toHaveLength(0);
+  });
 });

@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { computePerCheckEmployerMatch, type PayFreq } from "@/lib/employer-match";
+import { applyTax } from "@/lib/tax";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -12,9 +14,51 @@ async function requireUser() {
   return { supabase, user };
 }
 
+async function taxRateFor(supabase: Awaited<ReturnType<typeof createClient>>, userId: string): Promise<number | null> {
+  const { data } = await supabase.from("settings").select("tax_rate_pct").eq("user_id", userId).maybeSingle();
+  return data?.tax_rate_pct ?? null;
+}
+
 function revalidate() {
   revalidatePath("/today");
   revalidatePath("/income");
+  revalidatePath("/net-worth");
+}
+
+/**
+ * Rev 06b §4/§5: employer match is never trusted from the client — it's
+ * always recomputed here from the target account's own salary/match-tier
+ * settings and the posting income source's cadence, so it can't drift out
+ * of sync with what the account actually says.
+ */
+async function computeEmployerMatchForDeduction(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  targetAccountKey: string | null,
+  incomeSourceId: string,
+  contributionPct: number,
+): Promise<number> {
+  if (!targetAccountKey || contributionPct <= 0) return 0;
+  const { data: account } = await supabase
+    .from("accounts")
+    .select("type, salary, match_tier1_pct, match_tier2_limit_pct, match_tier2_rate_pct")
+    .eq("system_key", targetAccountKey)
+    .maybeSingle();
+  if (!account || account.type !== "401(k)" || !account.salary) return 0;
+  if (account.match_tier1_pct == null || account.match_tier2_limit_pct == null || account.match_tier2_rate_pct == null) return 0;
+
+  const { data: source } = await supabase.from("income_sources").select("freq").eq("id", incomeSourceId).maybeSingle();
+  const freq = (source?.freq ?? "biweekly") as PayFreq;
+
+  return computePerCheckEmployerMatch(
+    {
+      salaryAnnual: account.salary,
+      tier1LimitPct: account.match_tier1_pct,
+      tier2LimitPct: account.match_tier2_limit_pct,
+      tier2RatePct: account.match_tier2_rate_pct,
+    },
+    contributionPct,
+    freq,
+  );
 }
 
 // ---- Income sources ----
@@ -108,11 +152,13 @@ export async function createDeduction(formData: FormData) {
   const income_source_id = String(formData.get("income_source_id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const amount = Number(formData.get("amount") ?? 0);
-  const employer_match = Number(formData.get("employer_match") ?? 0);
   const target_account_key = String(formData.get("target_account_key") ?? "") || null;
+  const contribution_pct = Number(formData.get("contribution_pct") ?? 0);
   const tax_treatmentRaw = String(formData.get("tax_treatment") ?? "pre_tax");
   const tax_treatment = tax_treatmentRaw === "post_tax" ? "post_tax" : "pre_tax";
   if (!income_source_id || !name) throw new Error("Income source and name are required");
+
+  const employer_match = await computeEmployerMatchForDeduction(supabase, target_account_key, income_source_id, contribution_pct);
 
   const { error } = await supabase.from("deductions").insert({
     user_id: user.id,
@@ -132,11 +178,16 @@ export async function updateDeduction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const amount = Number(formData.get("amount") ?? 0);
-  const employer_match = Number(formData.get("employer_match") ?? 0);
+  const income_source_id = String(formData.get("income_source_id") ?? "");
   const target_account_key = String(formData.get("target_account_key") ?? "") || null;
+  const contribution_pct = Number(formData.get("contribution_pct") ?? 0);
   const tax_treatmentRaw = String(formData.get("tax_treatment") ?? "pre_tax");
   const tax_treatment = tax_treatmentRaw === "post_tax" ? "post_tax" : "pre_tax";
   if (!id || !name) throw new Error("Name is required");
+
+  const employer_match = income_source_id
+    ? await computeEmployerMatchForDeduction(supabase, target_account_key, income_source_id, contribution_pct)
+    : 0;
 
   const { error } = await supabase
     .from("deductions")
@@ -174,19 +225,22 @@ function isPaymentSource(value: string): value is PaymentSource {
 export async function createPurchase(formData: FormData) {
   const { supabase, user } = await requireUser();
   const name = String(formData.get("name") ?? "").trim();
-  const amount = Number(formData.get("amount") ?? 0);
+  const subtotal = Number(formData.get("amount") ?? 0);
   const spent_on = String(formData.get("spent_on") ?? "") || new Date().toISOString().slice(0, 10);
   const category = String(formData.get("category") ?? "Play");
   const payment_sourceRaw = String(formData.get("payment_source") ?? "checking");
   const payment_source = isPaymentSource(payment_sourceRaw) ? payment_sourceRaw : "checking";
   const source_account_id = String(formData.get("source_account_id") ?? "") || null;
   const card_id = String(formData.get("card_id") ?? "") || null;
-  if (!name || amount <= 0) throw new Error("Name and a positive amount are required");
+  const apply_tax = formData.get("apply_tax") === "on";
+  if (!name || subtotal <= 0) throw new Error("Name and a positive amount are required");
   if (payment_source === "rewards_card") {
     if (!card_id) throw new Error("Pick which card this was charged to");
   } else if (payment_source !== "checking" && !source_account_id) {
     throw new Error("Pick which account this comes out of");
   }
+
+  const amount = apply_tax ? applyTax(subtotal, true, await taxRateFor(supabase, user.id)) : subtotal;
 
   const { error } = await supabase.from("purchases").insert({
     user_id: user.id,
@@ -197,6 +251,7 @@ export async function createPurchase(formData: FormData) {
     payment_source,
     source_account_id: payment_source === "rewards_card" ? null : source_account_id,
     card_id: payment_source === "rewards_card" ? card_id : null,
+    apply_tax,
   });
   if (error) throw error;
 

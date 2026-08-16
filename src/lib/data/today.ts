@@ -8,7 +8,13 @@ import {
   type DeductionLike,
   type IncomeSourceLike,
 } from "@/lib/today";
-import { listIncomeSourcesWithVersions, listDeductions, listPurchasesInRange, findPostedPayPeriod } from "@/lib/data/income";
+import {
+  listIncomeSourcesWithVersions,
+  listDeductions,
+  listPurchasesInRange,
+  findPostedPayPeriod,
+  listIncomeAmountVersions,
+} from "@/lib/data/income";
 import { listRecurringItems, listOccurrencesInRange, listCategories } from "@/lib/data/recurring";
 import { closeElapsedPeriods } from "@/lib/data/close-periods";
 import { listAccounts, listHoldings } from "@/lib/data/accounts";
@@ -52,14 +58,23 @@ async function buildTodayReviewChecklist(): Promise<ReviewItem[]> {
   const lookbackStart = new Date();
   lookbackStart.setDate(lookbackStart.getDate() - CHECKLIST_LOOKBACK_DAYS);
 
-  const [accounts, snapshots, holdings, recentPurchases, dismissedIds, deductions] = await Promise.all([
+  const [accounts, snapshots, holdings, recentPurchases, dismissedIds, deductions, incomeAmountVersions] = await Promise.all([
     listAccounts(),
     listAllSnapshots(),
     listHoldings(),
     listPurchasesInRange(lookbackStart.toISOString().slice(0, 10), todayISO),
     listDismissedAlertIds(),
     listDeductions(),
+    listIncomeAmountVersions(),
   ]);
+
+  // §4: the most recent time a paycheck amount actually changed, regardless
+  // of which income source or its future effective_date — this is about
+  // when the user made the change, not when it takes effect.
+  const lastIncomeChangeISO =
+    incomeAmountVersions.length > 0
+      ? incomeAmountVersions.reduce((latest, v) => (v.created_at > latest ? v.created_at : latest), incomeAmountVersions[0].created_at)
+      : null;
 
   // Rev 04 §5: "contribution-fed" is derived from whether a deduction
   // actually targets this account, not a manually-set checkbox that can
@@ -100,6 +115,7 @@ async function buildTodayReviewChecklist(): Promise<ReviewItem[]> {
     bufferAccountName: bufferAccount?.name ?? null,
     bufferShortBy: status?.shortBy ?? 0,
     todayISO,
+    lastIncomeChangeISO,
   });
 
   return items.filter((item) => !dismissedIds.has(item.id));

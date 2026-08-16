@@ -70,6 +70,7 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   HYSA: "High-Yield Savings Account",
   "Stored-value": "Prepaid / reloadable",
   Liabilities: "Liability",
+  "401(k)": "401(k) / 403(b)",
 };
 
 export function accountTypeLabel(type: string): string {

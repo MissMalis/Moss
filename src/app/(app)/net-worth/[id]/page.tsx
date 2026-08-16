@@ -1,14 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getAccount, listHoldingsForAccount, ACCOUNT_TYPES } from "@/lib/data/accounts";
+import { getAccount, listHoldingsForAccount } from "@/lib/data/accounts";
 import { listSnapshotsForAccount } from "@/lib/data/net-worth-snapshots";
-import { accountTypeLabel, accountGroup, HOLDINGS_TYPES } from "@/lib/net-worth";
-import {
-  updateAccount,
-  deleteAccount,
-  updateAccountBalance,
-  updateStartingContributed,
-} from "@/lib/actions/accounts";
+import { listDeductions } from "@/lib/data/income";
+import { listIncomeSources } from "@/lib/data/income";
+import { accountTypeLabel, HOLDINGS_TYPES } from "@/lib/net-worth";
+import { deleteAccount } from "@/lib/actions/accounts";
 import { createHolding, updateHolding, deleteHolding } from "@/lib/actions/holdings";
 import { getCardForAccount, listCardMultipliers } from "@/lib/data/cards";
 import { listCategories } from "@/lib/data/recurring";
@@ -20,6 +17,8 @@ import { AddButton } from "@/components/AddButton";
 import { IconPicker } from "@/components/IconPicker";
 import { IconCircle } from "@/components/IconCircle";
 import { HoldingFields } from "@/components/TickerPriceField";
+import { AccountDetailsSection } from "@/components/AccountDetailsSection";
+import { AccountContributionSection } from "@/components/AccountContributionSection";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
 import { RowMenu } from "@/components/RowMenu";
 import { Tooltip } from "@/components/Tooltip";
@@ -32,30 +31,38 @@ import { BTN_GHOST, CARD, CARD_HEADER, INPUT, LABEL, LINK_QUIET } from "@/lib/ui
 const HOLDINGS_GRID = "grid grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr_auto] items-center gap-2";
 const ADD_POSITION_GRID = "grid grid-cols-[1fr_1fr_1fr_1fr_1fr] items-center gap-2";
 
+// Rev 06b §2: HSA now shows both a cash sleeve AND holdings (un-simplified
+// from Rev 05); every other investing type toggles between the two via
+// `uses_holdings`.
+const CONTRIBUTION_TYPES = new Set(["HSA", "401(k)", "Traditional IRA", "Roth IRA"]);
+
 export default async function AccountDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const account = await getAccount(id);
   if (!account) notFound();
 
   const isLiability = account.type === "Liabilities";
-  const [holdings, snapshotRows, linkedCard, categories] = await Promise.all([
+  const isHSA = account.type === "HSA";
+  const [holdings, snapshotRows, linkedCard, categories, deductions, incomeSources] = await Promise.all([
     listHoldingsForAccount(id),
     listSnapshotsForAccount(id),
     isLiability ? getCardForAccount(id) : Promise.resolve(null),
     isLiability ? listCategories() : Promise.resolve([]),
+    listDeductions(),
+    listIncomeSources(),
   ]);
   const cardMultipliers = linkedCard ? (await listCardMultipliers()).filter((m) => m.card_id === linkedCard.id) : [];
+  const accountDeductions = deductions.filter((d) => d.target_account_key === account.system_key);
 
   const holdingsValue = holdings.reduce((s, h) => s + h.qty * h.current_price, 0);
   const value = account.type === "Liabilities" ? -Math.abs(account.balance) : account.balance + holdingsValue;
   const series = snapshotRows.map((s) => ({ date: s.snapshot_date, contributed: s.contributed, marketValue: s.market_value }));
   const latest = series[series.length - 1];
   const growth = latest ? latest.marketValue - latest.contributed : 0;
-  const group = accountGroup(account.type);
-  // Rev 04 §5: cash sleeve only for HSA; the holdings-only types (401(k),
-  // IRAs, brokerage) no longer show a balance field at all.
-  const showsBalance = !HOLDINGS_TYPES.has(account.type);
-  const showsHoldings = HOLDINGS_TYPES.has(account.type);
+  // §2: holdings show for HSA (always, alongside its cash sleeve) or an
+  // investing type with the shares toggle on. Cash-sleeve/balance display
+  // is handled inside AccountDetailsSection.
+  const showsHoldings = isHSA || (HOLDINGS_TYPES.has(account.type) && account.uses_holdings);
 
   return (
     <div className="space-y-6">
@@ -93,96 +100,16 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
         )}
       </section>
 
-      <section className={`flex flex-wrap items-end gap-3 ${CARD}`}>
-        {showsBalance && (
-          <form action={updateAccountBalance} className="flex items-end gap-2">
-            <input type="hidden" name="id" value={account.id} />
-            <label className={LABEL}>
-              {account.type === "HSA" ? "Cash" : "Balance"}
-              <input type="number" step="0.01" name="balance" defaultValue={account.balance ?? 0} className={`w-32 ${INPUT}`} />
-            </label>
-            <button type="submit" className={BTN_GHOST}>
-              Save
-            </button>
-          </form>
-        )}
+      <AccountDetailsSection account={account} />
 
-        {group === "Investments" && (
-          <form action={updateStartingContributed} className="flex items-end gap-2">
-            <input type="hidden" name="id" value={account.id} />
-            <label className={LABEL}>
-              Total contributions
-              <input
-                type="number"
-                step="0.01"
-                name="starting_contributed"
-                defaultValue={account.starting_contributed ?? 0}
-                className={`w-32 ${INPUT}`}
-              />
-            </label>
-            <button type="submit" className={BTN_GHOST}>
-              Save
-            </button>
-          </form>
-        )}
-
-        {account.annual_contribution_limit && latest && (
-          <p className="text-[12px] text-ink-3">
-            {formatMoney(Math.max(0, account.annual_contribution_limit - latest.contributed))} from your{" "}
-            {formatMoney(account.annual_contribution_limit)} limit
-          </p>
-        )}
-      </section>
-
-      <section className={CARD}>
-        <p className={CARD_HEADER}>Details</p>
-        <form action={updateAccount} className="mt-3 flex flex-wrap items-end gap-3">
-          <input type="hidden" name="id" value={account.id} />
-          <label className={LABEL}>
-            Icon
-            <IconPicker name="icon" label={account.name} defaultValue={account.icon} />
-          </label>
-          <label className={LABEL}>
-            Name
-            <input name="name" defaultValue={account.name} className={INPUT} />
-          </label>
-          <label className={LABEL}>
-            Type
-            <select name="type" defaultValue={account.type} className={INPUT}>
-              {ACCOUNT_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {accountTypeLabel(t)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className={LABEL}>
-            APY %
-            <input type="number" step="0.01" name="apy_pct" defaultValue={account.apy_pct ?? ""} className={`w-16 ${INPUT}`} />
-          </label>
-          <label className={LABEL}>
-            APR %
-            <input type="number" step="0.01" name="apr_pct" defaultValue={account.apr_pct ?? ""} className={`w-16 ${INPUT}`} />
-          </label>
-          <label className={LABEL}>
-            Min cash
-            <input type="number" step="0.01" name="min_cash" defaultValue={account.min_cash ?? ""} className={`w-20 ${INPUT}`} />
-          </label>
-          <label className={LABEL}>
-            Annual limit
-            <input
-              type="number"
-              step="0.01"
-              name="annual_contribution_limit"
-              defaultValue={account.annual_contribution_limit ?? ""}
-              className={`w-24 ${INPUT}`}
-            />
-          </label>
-          <button type="submit" className={BTN_GHOST}>
-            Save
-          </button>
-        </form>
-      </section>
+      {CONTRIBUTION_TYPES.has(account.type) && (
+        <AccountContributionSection
+          accountSystemKey={account.system_key ?? ""}
+          accountType={account.type}
+          deductions={accountDeductions}
+          incomeSources={incomeSources.map((s) => ({ id: s.id, name: s.name }))}
+        />
+      )}
 
       {isLiability && (
         <section className={CARD}>

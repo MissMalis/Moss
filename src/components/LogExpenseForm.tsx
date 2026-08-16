@@ -118,6 +118,11 @@ export function LogExpenseForm({
         </label>
       )}
 
+      <label className="flex items-center gap-1.5 pb-2 text-[12.5px] text-ink-2">
+        <input type="checkbox" name="apply_tax" />
+        Add tax
+      </label>
+
       <button type="submit" className={BTN_SOLID}>
         Log the expense
       </button>

@@ -28,6 +28,8 @@ export interface Database {
         cash_app_card_id: string | null;
         gemini_key_set: boolean;
         market_key_set: boolean;
+        location: string | null;
+        tax_rate_pct: number | null;
         created_at: string;
       }>;
       accounts: Row<{
@@ -36,6 +38,8 @@ export interface Database {
         name: string;
         type:
           | "Cash"
+          | "Checking"
+          | "Savings"
           | "HYSA"
           | "Stored-value"
           | "HSA"
@@ -56,6 +60,15 @@ export interface Database {
         icon: string | null;
         min_cash: number | null;
         balance_updated_at: string | null;
+        last4: string | null;
+        debit_card_last4: string | null;
+        uses_holdings: boolean;
+        lump_cost_basis: number | null;
+        salary: number | null;
+        match_tier1_pct: number | null;
+        match_tier2_limit_pct: number | null;
+        match_tier2_rate_pct: number | null;
+        is_credit_card: boolean;
         created_at: string;
       }>;
       holdings: Row<{
@@ -112,6 +125,7 @@ export interface Database {
         interval_type: "dom" | "days" | "weeks";
         active: boolean;
         icon: string | null;
+        apply_tax: boolean;
         created_at: string;
       }>;
       recurring_occurrences: Row<{
@@ -135,6 +149,7 @@ export interface Database {
         payment_source: "checking" | "investing" | "stored_value" | "rewards_card";
         source_account_id: string | null;
         card_id: string | null;
+        apply_tax: boolean;
         created_at: string;
       }>;
       pay_periods: Row<{

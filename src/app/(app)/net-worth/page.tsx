@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { listAccounts, listHoldings, ACCOUNT_TYPES } from "@/lib/data/accounts";
+import { listAccounts, listHoldings } from "@/lib/data/accounts";
+import { listIncomeSources } from "@/lib/data/income";
 import { ensureSnapshotsForToday, listAllSnapshots } from "@/lib/data/net-worth-snapshots";
 import {
   computeNetWorth,
@@ -7,18 +8,15 @@ import {
   accountGroup,
   aggregateSnapshots,
 } from "@/lib/net-worth";
-import { createAccount } from "@/lib/actions/accounts";
 import { Money } from "@/components/Money";
 import { NetWorthHero } from "@/components/NetWorthHero";
 import { IconCircle } from "@/components/IconCircle";
-import { AddButton } from "@/components/AddButton";
-import { IconPicker } from "@/components/IconPicker";
 import { Collapsible } from "@/components/Collapsible";
 import { MoveMoneyButton } from "@/components/MoveMoneyButton";
+import { AccountWizard } from "@/components/AccountWizard";
 import { EmptyState } from "@/components/EmptyState";
-import { Tooltip } from "@/components/Tooltip";
 import { lucideKey } from "@/lib/icons";
-import { BTN_SOLID, CARD, CARD_HEADER, INPUT, LABEL } from "@/lib/ui";
+import { CARD, CARD_HEADER } from "@/lib/ui";
 
 // Rev 05 §4: Rocket-Money nested model — one "Assets" parent whose group
 // rows are Investments/Cash, one "Liabilities" parent whose one group is
@@ -83,7 +81,7 @@ function GroupRow({
 }
 
 export default async function NetWorthPage() {
-  const [accounts, holdings] = await Promise.all([listAccounts(), listHoldings()]);
+  const [accounts, holdings, incomeSources] = await Promise.all([listAccounts(), listHoldings(), listIncomeSources()]);
   await ensureSnapshotsForToday({ accounts, holdings });
   const snapshots = await listAllSnapshots();
 
@@ -116,70 +114,7 @@ export default async function NetWorthPage() {
       <NetWorthHero total={netWorth.total} points={historyPoints} />
 
       <div className="flex items-center justify-end gap-3">
-        <AddButton label="Add account">
-          <form action={createAccount} className="flex flex-wrap items-end gap-3">
-            <label className={LABEL}>
-              Icon
-              <IconPicker name="icon" />
-            </label>
-            <label className={LABEL}>
-              Name
-              <input name="name" required className={INPUT} />
-            </label>
-            <label className={LABEL}>
-              Type
-              <select name="type" className={INPUT}>
-                {ACCOUNT_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {accountTypeLabel(t)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className={LABEL}>
-              Starting balance
-              <input type="number" step="0.01" name="balance" defaultValue={0} className={`w-32 ${INPUT}`} />
-            </label>
-            <label className={LABEL}>
-              <span className="flex items-center gap-1">
-                Total contributions
-                <Tooltip text="What you've put in overall, including anything from before Moss — used to show growth vs. contributions." />
-              </span>
-              <input type="number" step="0.01" name="starting_contributed" defaultValue={0} className={`w-32 ${INPUT}`} />
-            </label>
-            <label className={LABEL}>
-              <span className="flex items-center gap-1">
-                APY %
-                <Tooltip text="For a High-Yield Savings Account — used to show accrued interest. Leave blank for anything else." />
-              </span>
-              <input type="number" step="0.01" name="apy_pct" className={`w-20 ${INPUT}`} />
-            </label>
-            <label className={LABEL}>
-              <span className="flex items-center gap-1">
-                APR %
-                <Tooltip text="For a liability — a credit card or loan's interest rate. Leave blank for anything else." />
-              </span>
-              <input type="number" step="0.01" name="apr_pct" className={`w-20 ${INPUT}`} />
-            </label>
-            <label className={LABEL}>
-              <span className="flex items-center gap-1">
-                Min cash
-                <Tooltip text="For HSA — Moss nudges you if the cash balance dips under this, since that usually means a charge triggered an auto-sell." />
-              </span>
-              <input type="number" step="0.01" name="min_cash" className={`w-20 ${INPUT}`} />
-            </label>
-            <label className={LABEL}>
-              <span className="flex items-center gap-1">
-                Annual limit
-                <Tooltip text="Optional — for 401(k)/HSA/IRA accounts, Moss will show how close you are to it as the year goes." />
-              </span>
-              <input type="number" step="0.01" name="annual_contribution_limit" className={`w-28 ${INPUT}`} />
-            </label>
-            <button type="submit" className={BTN_SOLID}>
-              Add account
-            </button>
-          </form>
-        </AddButton>
+        <AccountWizard incomeSources={incomeSources.map((s) => ({ id: s.id, name: s.name }))} />
       </div>
 
       {accounts.length === 0 ? (

@@ -19,10 +19,13 @@ export async function updateSettings(formData: FormData) {
     ? (biz_shiftRaw as "none" | "prior" | "next")
     : "next";
   const early_pay_days = Math.min(5, Math.max(0, Number(formData.get("early_pay_days") ?? 0) || 0));
+  const location = String(formData.get("location") ?? "").trim() || null;
+  const tax_rate_pctRaw = formData.get("tax_rate_pct");
+  const tax_rate_pct = tax_rate_pctRaw != null && tax_rate_pctRaw !== "" ? Number(tax_rate_pctRaw) : null;
 
   const { error } = await supabase
     .from("settings")
-    .upsert({ user_id: user.id, bank, biz_shift, early_pay_days }, { onConflict: "user_id" });
+    .upsert({ user_id: user.id, bank, biz_shift, early_pay_days, location, tax_rate_pct }, { onConflict: "user_id" });
   if (error) throw error;
 
   revalidatePath("/settings");

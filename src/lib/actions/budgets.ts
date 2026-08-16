@@ -22,8 +22,7 @@ export async function createBudget(formData: FormData) {
     .from("budgets")
     .upsert({ user_id: user.id, category, cap_amount }, { onConflict: "user_id,category" });
   if (error) throw error;
-  revalidatePath("/budgets");
-  revalidatePath("/today");
+  revalidatePath("/expenses");
 }
 
 export async function updateBudget(formData: FormData) {
@@ -34,8 +33,7 @@ export async function updateBudget(formData: FormData) {
 
   const { error } = await supabase.from("budgets").update({ cap_amount }).eq("id", id);
   if (error) throw error;
-  revalidatePath("/budgets");
-  revalidatePath("/today");
+  revalidatePath("/expenses");
 }
 
 export async function deleteBudget(formData: FormData) {
@@ -45,6 +43,5 @@ export async function deleteBudget(formData: FormData) {
 
   const { error } = await supabase.from("budgets").delete().eq("id", id);
   if (error) throw error;
-  revalidatePath("/budgets");
-  revalidatePath("/today");
+  revalidatePath("/expenses");
 }

@@ -2,7 +2,6 @@ import { SubNav } from "@/components/SubNav";
 
 const TABS = [
   { href: "/expenses", label: "Recurring bills" },
-  { href: "/expenses/contributions", label: "Contributions" },
   { href: "/expenses/categories", label: "Categories" },
   { href: "/expenses/log", label: "Log an expense" },
 ];

@@ -60,6 +60,31 @@ export default async function SettingsPage() {
           </select>
         </label>
 
+        <label className={LABEL}>
+          Location
+          <input
+            name="location"
+            defaultValue={settings.location ?? ""}
+            placeholder="Jersey City, NJ"
+            className={`max-w-xs ${INPUT}`}
+          />
+        </label>
+
+        <label className={LABEL}>
+          <span className="flex items-center gap-1">
+            Sales tax rate
+            <Tooltip text="Applied when you toggle 'Add tax' on a specific expense or bill — one rate for your location, not per-item rules." />
+          </span>
+          <input
+            type="number"
+            step="0.001"
+            name="tax_rate_pct"
+            defaultValue={settings.tax_rate_pct ?? ""}
+            placeholder="6.625"
+            className={`max-w-[140px] ${INPUT}`}
+          />
+        </label>
+
         <div>
           <button type="submit" className={BTN_SOLID}>
             Save

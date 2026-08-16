@@ -17,9 +17,14 @@ export interface CheckingAccountLike {
   is_forbidden_money: boolean;
 }
 
-/** The spendable base — a Cash account that isn't the Sweep buffer/channeling reserve. */
+// Savings deliberately excluded — like HYSA, it isn't the day-to-day
+// spendable pool, so moving money into/out of it shouldn't move Safe to
+// Spend (only Checking, or legacy "Cash" rows predating the Rev 06b split, do).
+const CHECKING_TYPES = new Set(["Cash", "Checking"]);
+
+/** The spendable base — a Checking/legacy-Cash account that isn't the Sweep buffer/channeling reserve. */
 export function isCheckingAccount(a: CheckingAccountLike): boolean {
-  return a.type === "Cash" && !a.is_forbidden_money;
+  return CHECKING_TYPES.has(a.type) && !a.is_forbidden_money;
 }
 
 /**

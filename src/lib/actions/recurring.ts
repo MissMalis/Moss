@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { listRecentActuals } from "@/lib/data/recurring";
 import { rollingAverage } from "@/lib/recurring";
+import { applyTax } from "@/lib/tax";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -12,6 +13,11 @@ async function requireUser() {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
   return { supabase, user };
+}
+
+async function taxRateFor(supabase: Awaited<ReturnType<typeof createClient>>, userId: string): Promise<number | null> {
+  const { data } = await supabase.from("settings").select("tax_rate_pct").eq("user_id", userId).maybeSingle();
+  return data?.tax_rate_pct ?? null;
 }
 
 function revalidate() {
@@ -58,10 +64,13 @@ export async function createRecurringItem(formData: FormData) {
   const { supabase, user } = await requireUser();
   const name = String(formData.get("name") ?? "").trim();
   const category_id = String(formData.get("category_id") ?? "") || null;
-  const amount = Number(formData.get("amount") ?? 0);
+  const subtotal = Number(formData.get("amount") ?? 0);
   const is_variable = formData.get("is_variable") === "on";
   const day_of_month = Number(formData.get("day_of_month") ?? 1);
+  const apply_tax = formData.get("apply_tax") === "on";
   if (!name) throw new Error("Name is required");
+
+  const amount = apply_tax ? applyTax(subtotal, true, await taxRateFor(supabase, user.id)) : subtotal;
 
   const { error } = await supabase.from("recurring_items").insert({
     user_id: user.id,
@@ -70,6 +79,7 @@ export async function createRecurringItem(formData: FormData) {
     amount,
     is_variable,
     day_of_month,
+    apply_tax,
     active: true,
   });
   if (error) throw error;
@@ -78,18 +88,21 @@ export async function createRecurringItem(formData: FormData) {
 
 /** "Edit going forward" — changes the item's default amount/config. */
 export async function updateRecurringItem(formData: FormData) {
-  const { supabase } = await requireUser();
+  const { supabase, user } = await requireUser();
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const category_id = String(formData.get("category_id") ?? "") || null;
-  const amount = Number(formData.get("amount") ?? 0);
+  const subtotal = Number(formData.get("amount") ?? 0);
   const is_variable = formData.get("is_variable") === "on";
   const day_of_month = Number(formData.get("day_of_month") ?? 1);
+  const apply_tax = formData.get("apply_tax") === "on";
   if (!id || !name) throw new Error("Missing item id or name");
+
+  const amount = apply_tax ? applyTax(subtotal, true, await taxRateFor(supabase, user.id)) : subtotal;
 
   const { error } = await supabase
     .from("recurring_items")
-    .update({ name, category_id, amount, is_variable, day_of_month })
+    .update({ name, category_id, amount, is_variable, day_of_month, apply_tax })
     .eq("id", id);
   if (error) throw error;
   revalidate();

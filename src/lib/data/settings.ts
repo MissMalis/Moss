@@ -24,6 +24,8 @@ export async function getSettings() {
       cash_app_card_id: null,
       gemini_key_set: false,
       market_key_set: false,
+      location: null,
+      tax_rate_pct: null,
       created_at: new Date().toISOString(),
     }
   );

@@ -1,21 +1,30 @@
+import Link from "next/link";
 import { listCategories, listRecurringItems, listOccurrencesInRange } from "@/lib/data/recurring";
-import { listIncomeSourcesWithVersions } from "@/lib/data/income";
+import { listIncomeSourcesWithVersions, listPurchasesInRange } from "@/lib/data/income";
+import { listBudgets } from "@/lib/data/budgets";
 import { createRecurringItem, updateRecurringItem, toggleRecurringItemActive, deleteRecurringItem } from "@/lib/actions/recurring";
 import { buildOccurrencesForWindow, sumEarmarked } from "@/lib/recurring";
+import { computeBudgetProgress } from "@/lib/budgets";
 import { windowsAround, findCurrentWindow, findFutureWindows } from "@/lib/today";
 import { nextOccurrenceOnOrAfter } from "@/lib/periods";
 import { formatMoney, formatDateRange } from "@/lib/format";
+import { groupByDate, type TransactionLike } from "@/lib/recent-transactions";
 import { AddButton } from "@/components/AddButton";
 import { EmptyState } from "@/components/EmptyState";
 import { IconCircle } from "@/components/IconCircle";
 import { CountdownBadge } from "@/components/CountdownBadge";
-import { CurrentPeriodCard } from "@/components/CurrentPeriodCard";
+import { PayPeriodToggle } from "@/components/PayPeriodToggle";
+import { BudgetTracker } from "@/components/BudgetTracker";
 import { StandardRow } from "@/components/StandardRow";
 import { RowMenu } from "@/components/RowMenu";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
+import { RecentList } from "@/components/RecentList";
+import { SpendingRing } from "@/components/SpendingRing";
 import { Tooltip } from "@/components/Tooltip";
 import { lucideKey } from "@/lib/icons";
-import { BTN_SOLID, CARD, CARD_HEADER, INPUT, LABEL, SCROLL_LIST } from "@/lib/ui";
+import { BTN_GHOST, BTN_SOLID, CARD, CARD_HEADER, INPUT, LABEL, LINK_QUIET, SCROLL_LIST } from "@/lib/ui";
+
+const DEFAULT_CATEGORY_ICON = lucideKey("credit-card");
 
 function currentMonthWindow() {
   const now = new Date();
@@ -27,10 +36,12 @@ function currentMonthWindow() {
 export default async function RecurringBillsPage() {
   const todayISO = new Date().toISOString().slice(0, 10);
   const { start, end } = currentMonthWindow();
-  const [categories, items, incomeSources] = await Promise.all([
+  const [categories, items, incomeSources, monthPurchases, budgetRows] = await Promise.all([
     listCategories(),
     listRecurringItems(),
     listIncomeSourcesWithVersions(),
+    listPurchasesInRange(start, end),
+    listBudgets(),
   ]);
 
   const primarySource = incomeSources.find((s) => s.freq !== "one-off") ?? null;
@@ -58,6 +69,36 @@ export default async function RecurringBillsPage() {
       )
     : [];
 
+  // §6: monthly budgets, tracked against this calendar month's checking-sourced spend.
+  const budgetProgress = computeBudgetProgress(budgetRows, monthPurchases);
+
+  // §8: "This month's expenses" + "Where it went" — same shared component/data as Dashboard and Sweep.
+  const transactions: TransactionLike[] = monthPurchases.map((p) => ({
+    id: p.id,
+    name: p.name,
+    amount: p.amount,
+    date: p.spent_on,
+    kind: "outflow",
+    category: p.category || null,
+  }));
+  const monthGroups = groupByDate(transactions);
+
+  const byCategory = new Map<string, number>();
+  for (const o of monthOccurrences) {
+    if (o.skipped) continue;
+    const name = o.item.category_id ? (categoryById.get(o.item.category_id)?.name ?? "Other") : "Other";
+    byCategory.set(name, (byCategory.get(name) ?? 0) + o.amount);
+  }
+  for (const p of monthPurchases) {
+    const name = p.category || "Other";
+    byCategory.set(name, (byCategory.get(name) ?? 0) + p.amount);
+  }
+  const categoryByName = new Map(categories.map((c) => [c.name, c]));
+  const spendingByCategory = Array.from(byCategory.entries())
+    .filter(([, amount]) => amount > 0)
+    .map(([name, amount]) => ({ name, amount, icon: categoryByName.get(name)?.emoji ?? DEFAULT_CATEGORY_ICON }))
+    .sort((a, b) => b.amount - a.amount);
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
@@ -67,60 +108,61 @@ export default async function RecurringBillsPage() {
             {formatMoney(monthEarmarked)}
           </p>
         </div>
-        <AddButton label="Add a bill">
-          <form action={createRecurringItem} className="flex flex-wrap items-end gap-3">
-            <label className={LABEL}>
-              Name
-              <input name="name" required className={INPUT} />
-            </label>
-            <label className={LABEL}>
-              Category
-              <select name="category_id" className={INPUT}>
-                <option value="">No category</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className={LABEL}>
-              Amount / estimate
-              <input type="number" step="0.01" name="amount" defaultValue={0} className={`w-28 ${INPUT}`} />
-            </label>
-            <label className={LABEL}>
-              Day of month
-              <input type="number" min={1} max={31} name="day_of_month" defaultValue={1} className={`w-20 ${INPUT}`} />
-            </label>
-            <label className="flex items-center gap-1 pb-2 text-[12.5px] text-ink-2">
-              <input type="checkbox" name="is_variable" />
-              Variable
-              <Tooltip text="Charges a different amount every time (like PSEG). Carries an estimate that true-ups to the actual once you mark it posted." />
-            </label>
-            <button type="submit" className={BTN_SOLID}>
-              Add a bill
-            </button>
-          </form>
-        </AddButton>
+        <div className="flex items-center gap-2">
+          <Link href="/expenses/log" className={BTN_GHOST}>
+            + Log an expense
+          </Link>
+          <AddButton label="+ Add a bill">
+            <form action={createRecurringItem} className="flex flex-wrap items-end gap-3">
+              <label className={LABEL}>
+                Name
+                <input name="name" required className={INPUT} />
+              </label>
+              <label className={LABEL}>
+                Category
+                <select name="category_id" className={INPUT}>
+                  <option value="">No category</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={LABEL}>
+                Amount / estimate
+                <input type="number" step="0.01" name="amount" defaultValue={0} className={`w-28 ${INPUT}`} />
+              </label>
+              <label className={LABEL}>
+                Day of month
+                <input type="number" min={1} max={31} name="day_of_month" defaultValue={1} className={`w-20 ${INPUT}`} />
+              </label>
+              <label className="flex items-center gap-1 pb-2 text-[12.5px] text-ink-2">
+                <input type="checkbox" name="is_variable" />
+                Variable
+                <Tooltip text="Charges a different amount every time (like PSEG). Carries an estimate that true-ups to the actual once you mark it posted." />
+              </label>
+              <label className="flex items-center gap-1 pb-2 text-[12.5px] text-ink-2">
+                <input type="checkbox" name="apply_tax" />
+                Add tax
+                <Tooltip text="Applies your location's sales-tax rate (set in Settings) to the amount above." />
+              </label>
+              <button type="submit" className={BTN_SOLID}>
+                Add a bill
+              </button>
+            </form>
+          </AddButton>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <CurrentPeriodCard
-          title="Current pay period"
-          window={currentWindow}
-          occurrences={currentPeriodOccurrences}
+        <PayPeriodToggle
+          current={{ window: currentWindow, occurrences: currentPeriodOccurrences, emptyLabel: "Nothing due this period." }}
+          next={{ window: nextWindow, occurrences: nextPeriodOccurrences, emptyLabel: "Nothing due next period." }}
           categoryById={categoryById}
           todayISO={todayISO}
-          emptyLabel="Nothing due this period."
         />
-        <CurrentPeriodCard
-          title="Next pay period"
-          window={nextWindow}
-          occurrences={nextPeriodOccurrences}
-          categoryById={categoryById}
-          todayISO={todayISO}
-          emptyLabel="Nothing due next period."
-        />
+        <BudgetTracker budgets={budgetProgress} categories={categories} />
       </div>
 
       <div className={CARD}>
@@ -174,6 +216,10 @@ export default async function RecurringBillsPage() {
                                 <input type="checkbox" name="is_variable" defaultChecked={item.is_variable} />
                                 Variable
                               </label>
+                              <label className="flex items-center gap-1.5 text-[12.5px] text-ink-2">
+                                <input type="checkbox" name="apply_tax" defaultChecked={item.apply_tax} />
+                                Add tax
+                              </label>
                               <button type="submit" className={BTN_SOLID}>
                                 Save
                               </button>
@@ -200,6 +246,35 @@ export default async function RecurringBillsPage() {
             })}
           </div>
         )}
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
+        <div className={CARD}>
+          <p className={CARD_HEADER}>
+            This month&apos;s expenses{" "}
+            <Link href="/expenses/log" className={`${LINK_QUIET} ml-1`}>
+              Log one →
+            </Link>
+          </p>
+          {monthGroups.length === 0 ? (
+            <p className="mt-3 text-[13px] text-ink-3">Nothing logged this month yet.</p>
+          ) : (
+            <div className={`mt-3 ${SCROLL_LIST}`}>
+              <RecentList groups={monthGroups} />
+            </div>
+          )}
+        </div>
+
+        <div className={CARD}>
+          <p className={CARD_HEADER}>Where it went</p>
+          <div className="mt-3">
+            {spendingByCategory.length === 0 ? (
+              <p className="text-[13px] text-ink-3">Nothing spent yet this month.</p>
+            ) : (
+              <SpendingRing data={spendingByCategory} />
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

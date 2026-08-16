@@ -629,3 +629,46 @@ alter table recurring_items add column if not exists icon text;
 -- page) instead of Sweep's old standalone "Cards" section.
 alter table cards add column if not exists account_id uuid references accounts(id) on delete set null;
 create index if not exists cards_account_idx on cards (account_id);
+
+-- ============================================================
+-- Moss — Revision 06b
+-- ============================================================
+
+-- §2: the account's own last 4 (Checking/Savings/HYSA), plus a separately
+-- linked debit card's last 4 (Checking/Savings/HYSA/HSA) — informational
+-- display only, distinct from the `cards` table's rewards/Sweep model.
+alter table accounts add column if not exists last4 text;
+alter table accounts add column if not exists debit_card_last4 text;
+
+-- §2: "holdings or lump balance" toggle for investing types — when false,
+-- `balance` holds the lump sum directly and `lump_cost_basis` its total
+-- cost basis, same convention as every other lump-balance type already
+-- uses `balance` (HOLDINGS_TYPES membership alone used to decide this;
+-- now it's membership AND this flag).
+alter table accounts add column if not exists uses_holdings boolean not null default true;
+alter table accounts add column if not exists lump_cost_basis numeric(12,2);
+
+-- §4: 401(k)/403(b) employer-match modeling — "100% up to X% of salary,
+-- then Y% up to Z%". Purely additive fields; employer_match still posts
+-- via the linked deduction row, never touching paycheck/Safe-to-spend math.
+alter table accounts add column if not exists salary numeric(12,2);
+alter table accounts add column if not exists match_tier1_pct numeric(5,2);
+alter table accounts add column if not exists match_tier2_limit_pct numeric(5,2);
+alter table accounts add column if not exists match_tier2_rate_pct numeric(5,2);
+
+-- §2: a Liability "is it a credit card?" toggle — when true, the account
+-- becomes eligible to link a `cards` row (already the Rev 05 §4/§6
+-- mechanism) and that card becomes selectable as a rewards card in Sweep.
+alter table accounts add column if not exists is_credit_card boolean not null default false;
+
+-- §7: taxes — a manual per-charge toggle. The location tax rate applies to
+-- the subtotal at save time and the result is what's stored in `amount`
+-- (single source of truth everywhere else already reads); this flag is
+-- just the provenance record of whether that happened.
+alter table purchases add column if not exists apply_tax boolean not null default false;
+alter table recurring_items add column if not exists apply_tax boolean not null default false;
+
+-- §7: one configurable location + sales-tax rate — honest scope, not
+-- per-item tax rules.
+alter table settings add column if not exists location text;
+alter table settings add column if not exists tax_rate_pct numeric(5,3);

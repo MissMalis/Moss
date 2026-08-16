@@ -6,6 +6,9 @@ const LOW_STORED_VALUE_THRESHOLD = 10;
 // Flag once less than 10% of the limit remains, not just once it's blown past.
 const LIMIT_PROXIMITY_FRACTION = 0.1;
 const STALE_BALANCE_DAYS = 30;
+// Rev 06b §4: a raise usually means a salary change too — nudge for this
+// long after the paycheck amount actually changes.
+const INCOME_CHANGE_REVIEW_WINDOW_DAYS = 14;
 
 export interface ReviewAccountLike {
   id: string;
@@ -47,8 +50,28 @@ export function buildReviewChecklist(params: {
   bufferAccountName: string | null;
   bufferShortBy: number;
   todayISO: string;
+  /** Most recent income-amount-change date (created_at), if any. */
+  lastIncomeChangeISO?: string | null;
 }): ReviewItem[] {
   const items: ReviewItem[] = [];
+
+  // §4: cross-alert — a paycheck change usually means a salary change too,
+  // so nudge toward reviewing 401(k) salary/contribution settings on
+  // whichever account(s) actually model a match. Keyed by the change's own
+  // date so a later raise re-surfaces even if this one was dismissed.
+  const has401k = params.accounts.some((a) => a.type === "401(k)");
+  if (has401k && params.lastIncomeChangeISO) {
+    const daysAgo = daysSince(params.lastIncomeChangeISO, params.todayISO);
+    if (daysAgo >= 0 && daysAgo <= INCOME_CHANGE_REVIEW_WINDOW_DAYS) {
+      items.push({
+        id: `income-changed-${params.lastIncomeChangeISO.slice(0, 10)}`,
+        icon: lucideKey("wallet"),
+        actionLabel: "Review 401(k) settings",
+        message: `Your paycheck amount changed ${daysAgo === 0 ? "today" : `${daysAgo} day${daysAgo === 1 ? "" : "s"} ago`} — check salary and contribution % on your 401(k)`,
+        href: "/net-worth",
+      });
+    }
+  }
 
   for (const a of params.accounts) {
     if (INVESTABLE_TYPES.has(a.type)) {
