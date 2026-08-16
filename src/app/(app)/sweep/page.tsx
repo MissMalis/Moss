@@ -47,7 +47,9 @@ export default async function SweepPage() {
 
   const cardById = new Map(cards.map((c) => [c.id, c]));
   const bufferAccount = accounts.find((a) => a.is_forbidden_money) ?? null;
-  const liabilityAccounts = accounts.filter((a) => a.type === "Liabilities");
+  // Rev 06b v2 §4: only credit-card liabilities are payable here — an auto
+  // loan or mortgage isn't "a card" Sweep can pay off.
+  const liabilityAccounts = accounts.filter((a) => a.type === "Credit card" || a.type === "Liabilities");
   const pendingTotal = unswept.reduce((s, c) => s + c.amount, 0);
   const status = bufferAccount ? reconciliationStatus(bufferAccount) : null;
   const channelingCard = cards.find((c) => c.id === settings.cash_app_card_id) ?? null;
@@ -238,7 +240,7 @@ export default async function SweepPage() {
           </summary>
           <div className="mt-2 flex flex-wrap gap-2">
             {accounts
-              .filter((a) => a.type === "Cash")
+              .filter((a) => a.type === "Cash" || a.type === "Checking" || a.type === "Savings")
               .map((a) => (
                 <form key={a.id} action={markForbiddenMoneyAccount}>
                   <input type="hidden" name="id" value={a.id} />

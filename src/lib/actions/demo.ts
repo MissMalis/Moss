@@ -43,6 +43,7 @@ const DEMO_TABLES = [
   "income_sources",
   "net_worth_snapshots",
   "holdings",
+  "liability_loans",
   "accounts",
 ] as const;
 
@@ -140,9 +141,9 @@ async function writeDemoDataset(supabase: Client, userId: string) {
 
   // ---- Accounts ----
   const accountsToInsert = [
-    { name: "Checking", type: "Cash", balance: 3200 },
+    { name: "Checking", type: "Checking", balance: 3200, last4: "4821" },
     { name: "HYSA", type: "HYSA", balance: 11500, apy_pct: 4.25 },
-    { name: "Buffer", type: "Cash", balance: 95, is_forbidden_money: true, icon: lucideKey("wallet") },
+    { name: "Buffer", type: "Checking", balance: 95, is_forbidden_money: true, icon: lucideKey("wallet") },
     { name: "Transit card", type: "Stored-value", balance: 8, icon: lucideKey("train") },
     {
       name: "HSA",
@@ -161,6 +162,10 @@ async function writeDemoDataset(supabase: Client, userId: string) {
       is_system: true,
       system_key: "401k",
       annual_contribution_limit: 23500,
+      salary: 95000,
+      match_tier1_pct: 3,
+      match_tier2_rate_pct: 50,
+      match_tier2_limit_pct: 5,
       balance_updated_at: daysAgo(today, 35).toISOString(),
     },
     {
@@ -172,9 +177,9 @@ async function writeDemoDataset(supabase: Client, userId: string) {
       balance_updated_at: today.toISOString(),
     },
     { name: "Taxable Brokerage", type: "Taxable Brokerage", balance: 0 },
-    { name: "Credit card", type: "Liabilities", balance: 2400, apr_pct: 22.9 },
-    { name: "Car loan", type: "Liabilities", balance: 9800, apr_pct: 6.4 },
-    { name: "Student loan", type: "Liabilities", balance: 14500, apr_pct: 5.2 },
+    { name: "Credit card", type: "Credit card", balance: 2400, apr_pct: 22.9 },
+    { name: "Car loan", type: "Auto loan", balance: 9800, apr_pct: 6.4, loan_term_months: 60 },
+    { name: "Student loans", type: "Student loans", balance: 14500, apr_pct: 5.2 },
   ] as const;
 
   const { data: accounts, error: acctErr } = await supabase
@@ -183,6 +188,15 @@ async function writeDemoDataset(supabase: Client, userId: string) {
     .select("id, name");
   if (acctErr) throw acctErr;
   const acctByName = new Map(accounts.map((a) => [a.name, a.id]));
+
+  // §4: every liability gets its sub-loan(s) — Student loans shows the
+  // grouped-loans feature (two federal loans rolling up to one blended APR).
+  await supabase.from("liability_loans").insert([
+    { user_id: uid, account_id: acctByName.get("Credit card"), name: "Credit card", balance: 2400, apr_pct: 22.9 },
+    { user_id: uid, account_id: acctByName.get("Car loan"), name: "Car loan", balance: 9800, apr_pct: 6.4 },
+    { user_id: uid, account_id: acctByName.get("Student loans"), name: "Federal Loan A", balance: 9500, apr_pct: 5.8 },
+    { user_id: uid, account_id: acctByName.get("Student loans"), name: "Federal Loan B", balance: 5000, apr_pct: 4.2 },
+  ]);
 
   await supabase.from("holdings").insert([
     // HSA is cash-sleeve-only in rev 04 (§5) — no holdings row for it.

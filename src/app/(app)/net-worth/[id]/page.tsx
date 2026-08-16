@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getAccount, listHoldingsForAccount } from "@/lib/data/accounts";
+import { getAccount, listHoldingsForAccount, listLiabilityLoans } from "@/lib/data/accounts";
 import { listSnapshotsForAccount } from "@/lib/data/net-worth-snapshots";
-import { listDeductions } from "@/lib/data/income";
-import { listIncomeSources } from "@/lib/data/income";
-import { accountTypeLabel, HOLDINGS_TYPES } from "@/lib/net-worth";
+import { listDeductions, listIncomeSources } from "@/lib/data/income";
+import { accountTypeLabel, blendedApr } from "@/lib/net-worth";
+import { LIABILITY_TYPE_SET } from "@/lib/account-types";
+import { getAssetFieldConfig, assetShowsHoldingsList } from "@/lib/account-field-config";
 import { deleteAccount } from "@/lib/actions/accounts";
 import { createHolding, updateHolding, deleteHolding } from "@/lib/actions/holdings";
 import { getCardForAccount, listCardMultipliers } from "@/lib/data/cards";
@@ -19,11 +20,14 @@ import { IconCircle } from "@/components/IconCircle";
 import { HoldingFields } from "@/components/TickerPriceField";
 import { AccountDetailsSection } from "@/components/AccountDetailsSection";
 import { AccountContributionSection } from "@/components/AccountContributionSection";
+import { LiabilityDetailsSection } from "@/components/LiabilityDetailsSection";
+import { LiabilityLoansSection } from "@/components/LiabilityLoansSection";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
 import { RowMenu } from "@/components/RowMenu";
 import { Tooltip } from "@/components/Tooltip";
 import { EmptyState } from "@/components/EmptyState";
 import { lucideKey } from "@/lib/icons";
+import { CONTRIBUTION_TYPES } from "@/lib/account-types";
 import { BTN_GHOST, CARD, CARD_HEADER, INPUT, LABEL, LINK_QUIET } from "@/lib/ui";
 
 // Holdings grid columns, shared between the header row and every data row
@@ -31,23 +35,24 @@ import { BTN_GHOST, CARD, CARD_HEADER, INPUT, LABEL, LINK_QUIET } from "@/lib/ui
 const HOLDINGS_GRID = "grid grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr_auto] items-center gap-2";
 const ADD_POSITION_GRID = "grid grid-cols-[1fr_1fr_1fr_1fr_1fr] items-center gap-2";
 
-// Rev 06b §2: HSA now shows both a cash sleeve AND holdings (un-simplified
-// from Rev 05); every other investing type toggles between the two via
-// `uses_holdings`.
-const CONTRIBUTION_TYPES = new Set(["HSA", "401(k)", "Traditional IRA", "Roth IRA"]);
+function mask(last4: string | null): string | null {
+  return last4 ? `x${last4}` : null;
+}
 
 export default async function AccountDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const account = await getAccount(id);
   if (!account) notFound();
 
-  const isLiability = account.type === "Liabilities";
-  const isHSA = account.type === "HSA";
-  const [holdings, snapshotRows, linkedCard, categories, deductions, incomeSources] = await Promise.all([
-    listHoldingsForAccount(id),
+  const isLiability = LIABILITY_TYPE_SET.has(account.type);
+  const isCreditCard = account.type === "Credit card";
+
+  const [holdings, snapshotRows, loans, linkedCard, categories, deductions, incomeSources] = await Promise.all([
+    isLiability ? Promise.resolve([]) : listHoldingsForAccount(id),
     listSnapshotsForAccount(id),
-    isLiability ? getCardForAccount(id) : Promise.resolve(null),
-    isLiability ? listCategories() : Promise.resolve([]),
+    isLiability ? listLiabilityLoans(id) : Promise.resolve([]),
+    isCreditCard ? getCardForAccount(id) : Promise.resolve(null),
+    isCreditCard ? listCategories() : Promise.resolve([]),
     listDeductions(),
     listIncomeSources(),
   ]);
@@ -55,14 +60,15 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
   const accountDeductions = deductions.filter((d) => d.target_account_key === account.system_key);
 
   const holdingsValue = holdings.reduce((s, h) => s + h.qty * h.current_price, 0);
-  const value = account.type === "Liabilities" ? -Math.abs(account.balance) : account.balance + holdingsValue;
+  const loansTotal = loans.reduce((s, l) => s + l.balance, 0);
+  const value = isLiability ? -Math.abs(loans.length > 0 ? loansTotal : account.balance) : account.balance + holdingsValue;
+  const blended = isLiability ? blendedApr(loans) : null;
   const series = snapshotRows.map((s) => ({ date: s.snapshot_date, contributed: s.contributed, marketValue: s.market_value }));
   const latest = series[series.length - 1];
   const growth = latest ? latest.marketValue - latest.contributed : 0;
-  // §2: holdings show for HSA (always, alongside its cash sleeve) or an
-  // investing type with the shares toggle on. Cash-sleeve/balance display
-  // is handled inside AccountDetailsSection.
-  const showsHoldings = isHSA || (HOLDINGS_TYPES.has(account.type) && account.uses_holdings);
+
+  const assetCfg = !isLiability ? getAssetFieldConfig(account.type) : null;
+  const showsHoldings = assetCfg ? assetShowsHoldingsList(assetCfg, account.uses_holdings) : false;
 
   return (
     <div className="space-y-6">
@@ -75,7 +81,11 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
           <IconCircle value={account.icon} label={account.name} variant="solid" />
           <div>
             <h1 className="font-display text-[22px] font-medium text-ink">{account.name}</h1>
-            <p className="text-[13px] text-ink-3">{accountTypeLabel(account.type)}</p>
+            <p className="text-[13px] text-ink-3">
+              {accountTypeLabel(account.type)}
+              {mask(account.last4) ? ` · ${mask(account.last4)}` : ""}
+              {mask(account.debit_card_last4) ? ` · card ${mask(account.debit_card_last4)}` : ""}
+            </p>
           </div>
         </div>
         <div className="mt-3">
@@ -84,8 +94,8 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
             <p className="mt-1 text-[13px] text-ink-2">
               {account.apy_pct}% APY · ~{formatMoney((account.balance ?? 0) * (account.apy_pct / 100))}/yr earned
             </p>
-          ) : account.type === "Liabilities" && account.apr_pct ? (
-            <p className="mt-1 text-[13px] text-ink-2">{account.apr_pct}% APR</p>
+          ) : isLiability && blended != null ? (
+            <p className="mt-1 text-[13px] text-ink-2">{blended}% blended APR</p>
           ) : latest ? (
             <p className={`mt-1 text-[13px] ${growth >= 0 ? "text-good" : "text-bad"}`}>
               {growth >= 0 ? "▲" : "▼"} {formatMoney(Math.abs(growth))} growth vs. {formatMoney(latest.contributed)} contributed
@@ -100,9 +110,9 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
         )}
       </section>
 
-      <AccountDetailsSection account={account} />
+      {isLiability ? <LiabilityDetailsSection account={account} /> : <AccountDetailsSection account={account} />}
 
-      {CONTRIBUTION_TYPES.has(account.type) && (
+      {!isLiability && CONTRIBUTION_TYPES.has(account.type) && (
         <AccountContributionSection
           accountSystemKey={account.system_key ?? ""}
           accountType={account.type}
@@ -111,7 +121,9 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
         />
       )}
 
-      {isLiability && (
+      {isLiability && <LiabilityLoansSection accountId={account.id} loans={loans} />}
+
+      {isCreditCard && (
         <section className={CARD}>
           <p className={CARD_HEADER}>Card</p>
           {!linkedCard ? (
@@ -163,7 +175,7 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
                     <p className="text-[14px] text-ink">{linkedCard.name}</p>
                     <p className="text-[12px] text-ink-3">
                       {linkedCard.network ?? "card"}
-                      {linkedCard.last4 ? ` ···· ${linkedCard.last4}` : ""} · base {linkedCard.base_multiplier}x
+                      {linkedCard.last4 ? ` ${mask(linkedCard.last4)}` : ""} · base {linkedCard.base_multiplier}x
                     </p>
                   </div>
                 </div>

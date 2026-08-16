@@ -47,6 +47,14 @@ export interface Database {
           | "Traditional IRA"
           | "401(k)"
           | "Taxable Brokerage"
+          | "Other"
+          | "Credit card"
+          | "Student loans"
+          | "Auto loan"
+          | "Mortgage"
+          | "Personal loan"
+          | "Medical debt"
+          | "Other Debt"
           | "Liabilities";
         balance: number;
         is_system: boolean;
@@ -62,6 +70,7 @@ export interface Database {
         balance_updated_at: string | null;
         last4: string | null;
         debit_card_last4: string | null;
+        debit_card_network: string | null;
         uses_holdings: boolean;
         lump_cost_basis: number | null;
         salary: number | null;
@@ -69,6 +78,8 @@ export interface Database {
         match_tier2_limit_pct: number | null;
         match_tier2_rate_pct: number | null;
         is_credit_card: boolean;
+        notes: string | null;
+        loan_term_months: number | null;
         created_at: string;
       }>;
       holdings: Row<{
@@ -80,6 +91,15 @@ export interface Database {
         cost_basis: number;
         current_price: number;
         buy_date: string | null;
+        created_at: string;
+      }>;
+      liability_loans: Row<{
+        id: string;
+        user_id: string;
+        account_id: string;
+        name: string;
+        balance: number;
+        apr_pct: number | null;
         created_at: string;
       }>;
       income_sources: Row<{

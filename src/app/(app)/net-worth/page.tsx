@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { listAccounts, listHoldings } from "@/lib/data/accounts";
+import { listAccounts, listHoldings, listAllLiabilityLoans } from "@/lib/data/accounts";
 import { listIncomeSources } from "@/lib/data/income";
 import { ensureSnapshotsForToday, listAllSnapshots } from "@/lib/data/net-worth-snapshots";
 import {
@@ -7,13 +7,15 @@ import {
   accountTypeLabel,
   accountGroup,
   aggregateSnapshots,
+  blendedApr,
 } from "@/lib/net-worth";
+import { LIABILITY_TYPE_SET } from "@/lib/account-types";
 import { Money } from "@/components/Money";
 import { NetWorthHero } from "@/components/NetWorthHero";
 import { IconCircle } from "@/components/IconCircle";
 import { Collapsible } from "@/components/Collapsible";
 import { MoveMoneyButton } from "@/components/MoveMoneyButton";
-import { AccountWizard } from "@/components/AccountWizard";
+import { AddAssetButton, AddLiabilityButton } from "@/components/AccountWizard";
 import { EmptyState } from "@/components/EmptyState";
 import { lucideKey } from "@/lib/icons";
 import { CARD, CARD_HEADER } from "@/lib/ui";
@@ -25,7 +27,9 @@ const ASSET_SUBGROUPS = ["Investments", "Cash"] as const;
 
 type AccountRowData = { id: string; name: string; icon: string | null; type: string; apr_pct: number | null; apy_pct: number | null };
 
-function AccountRow({ a, value }: { a: AccountRowData; value: number }) {
+function AccountRow({ a, value, blended }: { a: AccountRowData; value: number; blended: number | null }) {
+  const isLiability = LIABILITY_TYPE_SET.has(a.type);
+  const apr = isLiability ? (blended ?? a.apr_pct) : null;
   return (
     <Link
       href={`/net-worth/${a.id}`}
@@ -36,7 +40,7 @@ function AccountRow({ a, value }: { a: AccountRowData; value: number }) {
         <p className="truncate text-[14px] text-ink">{a.name}</p>
         <p className="truncate text-[12px] text-ink-3">
           {accountTypeLabel(a.type)}
-          {a.type === "Liabilities" && a.apr_pct ? ` · ${a.apr_pct}% APR` : ""}
+          {apr != null ? ` · ${apr}% ${blended != null ? "blended " : ""}APR` : ""}
           {a.type === "HYSA" && a.apy_pct ? ` · ${a.apy_pct}% APY` : ""}
         </p>
       </div>
@@ -52,6 +56,7 @@ function GroupRow({
   pctLabel,
   accountsInGroup,
   valueById,
+  blendedByAccount,
 }: {
   label: string;
   total: number;
@@ -59,6 +64,7 @@ function GroupRow({
   pctLabel: "assets" | "liabilities";
   accountsInGroup: AccountRowData[];
   valueById: Map<string, number>;
+  blendedByAccount: Map<string, number>;
 }) {
   return (
     <Collapsible
@@ -73,7 +79,7 @@ function GroupRow({
     >
       <div className="space-y-0.5 pb-2 pl-1">
         {accountsInGroup.map((a) => (
-          <AccountRow key={a.id} a={a} value={valueById.get(a.id) ?? 0} />
+          <AccountRow key={a.id} a={a} value={valueById.get(a.id) ?? 0} blended={blendedByAccount.get(a.id) ?? null} />
         ))}
       </div>
     </Collapsible>
@@ -81,11 +87,16 @@ function GroupRow({
 }
 
 export default async function NetWorthPage() {
-  const [accounts, holdings, incomeSources] = await Promise.all([listAccounts(), listHoldings(), listIncomeSources()]);
+  const [accounts, holdings, incomeSources, liabilityLoans] = await Promise.all([
+    listAccounts(),
+    listHoldings(),
+    listIncomeSources(),
+    listAllLiabilityLoans(),
+  ]);
   await ensureSnapshotsForToday({ accounts, holdings });
   const snapshots = await listAllSnapshots();
 
-  const netWorth = computeNetWorth(accounts, holdings);
+  const netWorth = computeNetWorth(accounts, holdings, liabilityLoans);
   const historyPoints = aggregateSnapshots(
     snapshots.map((s) => ({
       snapshot_date: s.snapshot_date,
@@ -94,6 +105,16 @@ export default async function NetWorthPage() {
       market_value: s.market_value,
     })),
   );
+
+  const loansByAccount = new Map<string, typeof liabilityLoans>();
+  for (const l of liabilityLoans) {
+    loansByAccount.set(l.account_id, [...(loansByAccount.get(l.account_id) ?? []), l]);
+  }
+  const blendedByAccount = new Map<string, number>();
+  for (const [accountId, loans] of loansByAccount) {
+    const b = blendedApr(loans);
+    if (b != null) blendedByAccount.set(accountId, b);
+  }
 
   const valueById = new Map(netWorth.accounts.map((av) => [av.id, av.value]));
   const assetsTotal = ASSET_SUBGROUPS.reduce(
@@ -107,14 +128,15 @@ export default async function NetWorthPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-end gap-3">
         <MoveMoneyButton accounts={transferAccounts} />
       </div>
 
       <NetWorthHero total={netWorth.total} points={historyPoints} />
 
       <div className="flex items-center justify-end gap-3">
-        <AccountWizard incomeSources={incomeSources.map((s) => ({ id: s.id, name: s.name }))} />
+        <AddLiabilityButton />
+        <AddAssetButton incomeSources={incomeSources.map((s) => ({ id: s.id, name: s.name, freq: s.freq }))} />
       </div>
 
       {accounts.length === 0 ? (
@@ -141,6 +163,7 @@ export default async function NetWorthPage() {
                     pctLabel="assets"
                     accountsInGroup={inGroup}
                     valueById={valueById}
+                    blendedByAccount={blendedByAccount}
                   />
                 );
               })}
@@ -161,6 +184,7 @@ export default async function NetWorthPage() {
                   pctLabel="liabilities"
                   accountsInGroup={liabilitiesAccounts}
                   valueById={valueById}
+                  blendedByAccount={blendedByAccount}
                 />
               </div>
             </div>

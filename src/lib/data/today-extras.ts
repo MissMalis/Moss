@@ -1,11 +1,11 @@
-import { listAccounts, listHoldings } from "@/lib/data/accounts";
+import { listAccounts, listHoldings, listAllLiabilityLoans } from "@/lib/data/accounts";
 import { ensureSnapshotsForToday, listAllSnapshots } from "@/lib/data/net-worth-snapshots";
 import { listMarketIndices } from "@/lib/data/market-indices";
 import { listPurchasesInRange } from "@/lib/data/income";
 import { listRecentPayPeriods } from "@/lib/data/history";
 import { listTransfersInRange } from "@/lib/data/transfers";
 import { listRecurringItems, listOccurrencesInRange, listCategories } from "@/lib/data/recurring";
-import { computeNetWorth, aggregateSnapshots } from "@/lib/net-worth";
+import { computeNetWorth, aggregateSnapshots, accountGroup } from "@/lib/net-worth";
 import { occurrenceInWindow } from "@/lib/periods";
 import { groupByDate, type TransactionLike } from "@/lib/recent-transactions";
 import { weekStrip, type UpcomingItem } from "@/lib/upcoming-week";
@@ -33,7 +33,7 @@ export async function getTodayExtras(todayISO: string) {
   const sinceISO = addDays(todayISO, -RECENT_LOOKBACK_DAYS);
   const weekEnd = addDays(todayISO, 7);
 
-  const [snapshots, indices, purchases, recentPayPeriods, recurringItems, occurrences, categories, transfers] =
+  const [snapshots, indices, purchases, recentPayPeriods, recurringItems, occurrences, categories, transfers, liabilityLoans] =
     await Promise.all([
       listAllSnapshots(),
       listMarketIndices(),
@@ -43,13 +43,14 @@ export async function getTodayExtras(todayISO: string) {
       listOccurrencesInRange(sinceISO, weekEnd),
       listCategories(),
       listTransfersInRange(sinceISO, todayISO),
+      listAllLiabilityLoans(),
     ]);
 
   const accountNameById = new Map(accounts.map((a) => [a.id, a.name]));
 
-  const netWorth = computeNetWorth(accounts, holdings);
-  const assetsCount = accounts.filter((a) => a.type !== "Liabilities").length;
-  const liabilitiesCount = accounts.filter((a) => a.type === "Liabilities").length;
+  const netWorth = computeNetWorth(accounts, holdings, liabilityLoans);
+  const assetsCount = accounts.filter((a) => accountGroup(a.type) !== "Liabilities").length;
+  const liabilitiesCount = accounts.filter((a) => accountGroup(a.type) === "Liabilities").length;
   const historyPoints = aggregateSnapshots(
     snapshots.map((s) => ({
       snapshot_date: s.snapshot_date,

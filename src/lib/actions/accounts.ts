@@ -2,10 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { ACCOUNT_TYPES } from "@/lib/data/accounts";
+import { ACCOUNT_TYPES, LIABILITY_TYPE_SET } from "@/lib/account-types";
 import { computePerCheckEmployerMatch, type PayFreq } from "@/lib/employer-match";
 
-// Rev 06b §2: tax treatment is fixed by account type, not a user choice.
+// Rev 06b v2 §6: tax treatment is fixed by account type, not a user choice.
 const CONTRIBUTION_TAX_TREATMENT: Record<string, "pre_tax" | "post_tax"> = {
   HSA: "pre_tax",
   "401(k)": "pre_tax",
@@ -37,55 +37,65 @@ function slugify(name: string): string {
     .replace(/^_+|_+$/g, "");
 }
 
+function numOrNull(formData: FormData, key: string): number | null {
+  const raw = formData.get(key);
+  return raw != null && raw !== "" ? Number(raw) : null;
+}
+
+function asOfToISO(formData: FormData): string {
+  const raw = String(formData.get("as_of") ?? "");
+  return raw ? new Date(raw + "T00:00:00").toISOString() : new Date().toISOString();
+}
+
+/** Reads indexed holding-position fields (`symbol_0`, `qty_0`, ...) — the wizard's multi-"Add position" rows (§5). */
+function readPositions(formData: FormData): { symbol: string; qty: number; cost_basis: number; current_price: number; buy_date: string | null }[] {
+  const count = Number(formData.get("position_count") ?? 0);
+  const positions: ReturnType<typeof readPositions> = [];
+  for (let i = 0; i < count; i++) {
+    const symbol = String(formData.get(`symbol_${i}`) ?? "").trim().toUpperCase();
+    if (!symbol) continue;
+    positions.push({
+      symbol,
+      qty: Number(formData.get(`qty_${i}`) ?? 0),
+      cost_basis: Number(formData.get(`cost_basis_${i}`) ?? 0),
+      current_price: Number(formData.get(`current_price_${i}`) ?? 0),
+      buy_date: String(formData.get(`buy_date_${i}`) ?? "") || null,
+    });
+  }
+  return positions;
+}
+
 /**
- * Rev 06b §1-2: the wizard's step-2 submit. Creates the account with its
- * type-specific fields, then — best-effort, same pattern as other
- * multi-insert actions in this file — an optional first holding, an
- * optional linked rewards card (Liability + "is a credit card"), and an
- * optional initial contribution (deduction). Returns the new id so the
- * wizard can route straight to the account detail page (§1: "Then → the
- * account detail page").
+ * Rev 06b v2 §1-5: the wizard's step-2 submit for an ASSET. Creates the
+ * account with its type-specific fields, then — best-effort, same pattern
+ * as other multi-insert actions in this file — any initial positions
+ * (§5: multiple "Add position" rows) and an optional initial contribution
+ * (§6/§7). Returns the new id so the wizard can route straight to the
+ * account detail page.
  */
 export async function createAccount(formData: FormData): Promise<{ id: string }> {
   const { supabase, user } = await requireUser();
   const name = String(formData.get("name") ?? "").trim();
   const type = String(formData.get("type") ?? "");
   const balance = Number(formData.get("balance") ?? 0);
+  // §5: in lump mode, "total cost basis" IS the contributed baseline —
+  // reuses starting_contributed rather than a parallel field.
   const starting_contributed = Number(formData.get("starting_contributed") ?? 0);
-  // Rev 04 §5: no more "Fed by paycheck contributions" checkbox — every
-  // account gets a linking key, and whether it's actually contribution-fed
-  // is derived live from whether a deduction targets it (see
-  // data/today.ts's checklist builder), not a manually-set flag that can
-  // drift from reality.
   const system_key = slugify(name);
-  const apy_pctRaw = formData.get("apy_pct");
-  const apy_pct = apy_pctRaw != null && apy_pctRaw !== "" ? Number(apy_pctRaw) : null;
-  const apr_pctRaw = formData.get("apr_pct");
-  const apr_pct = apr_pctRaw != null && apr_pctRaw !== "" ? Number(apr_pctRaw) : null;
-  const annualLimitRaw = formData.get("annual_contribution_limit");
-  const annual_contribution_limit =
-    annualLimitRaw != null && annualLimitRaw !== "" ? Number(annualLimitRaw) : null;
-  const minCashRaw = formData.get("min_cash");
-  const min_cash = minCashRaw != null && minCashRaw !== "" ? Number(minCashRaw) : null;
+  const apy_pct = numOrNull(formData, "apy_pct");
+  const annual_contribution_limit = numOrNull(formData, "annual_contribution_limit");
+  const min_cash = numOrNull(formData, "min_cash");
   const icon = String(formData.get("icon") ?? "").trim() || null;
   const last4 = String(formData.get("last4") ?? "").trim() || null;
   const debit_card_last4 = String(formData.get("debit_card_last4") ?? "").trim() || null;
+  const debit_card_network = String(formData.get("debit_card_network") ?? "").trim() || null;
   const uses_holdings = formData.get("uses_holdings") === "on";
-  const lump_cost_basisRaw = formData.get("lump_cost_basis");
-  const lump_cost_basis = lump_cost_basisRaw != null && lump_cost_basisRaw !== "" ? Number(lump_cost_basisRaw) : null;
-  const salaryRaw = formData.get("salary");
-  const salary = salaryRaw != null && salaryRaw !== "" ? Number(salaryRaw) : null;
-  const match_tier1_pctRaw = formData.get("match_tier1_pct");
-  const match_tier1_pct = match_tier1_pctRaw != null && match_tier1_pctRaw !== "" ? Number(match_tier1_pctRaw) : null;
-  const match_tier2_limit_pctRaw = formData.get("match_tier2_limit_pct");
-  const match_tier2_limit_pct =
-    match_tier2_limit_pctRaw != null && match_tier2_limit_pctRaw !== "" ? Number(match_tier2_limit_pctRaw) : null;
-  const match_tier2_rate_pctRaw = formData.get("match_tier2_rate_pct");
-  const match_tier2_rate_pct =
-    match_tier2_rate_pctRaw != null && match_tier2_rate_pctRaw !== "" ? Number(match_tier2_rate_pctRaw) : null;
-  const is_credit_card = formData.get("is_credit_card") === "on";
-  const as_ofRaw = String(formData.get("as_of") ?? "");
-  const balance_updated_at = as_ofRaw ? new Date(as_ofRaw + "T00:00:00").toISOString() : new Date().toISOString();
+  const salary = numOrNull(formData, "salary");
+  const match_tier1_pct = numOrNull(formData, "match_tier1_pct");
+  const match_tier2_limit_pct = numOrNull(formData, "match_tier2_limit_pct");
+  const match_tier2_rate_pct = numOrNull(formData, "match_tier2_rate_pct");
+  const notes = String(formData.get("notes") ?? "").trim() || null;
+  const balance_updated_at = asOfToISO(formData);
   if (!name || !type) throw new Error("Name and type are required");
   if (!isAccountType(type)) throw new Error("Invalid account type");
 
@@ -99,51 +109,33 @@ export async function createAccount(formData: FormData): Promise<{ id: string }>
       starting_contributed,
       system_key,
       apy_pct,
-      apr_pct,
       annual_contribution_limit,
       min_cash,
       icon,
       last4,
       debit_card_last4,
+      debit_card_network,
       uses_holdings,
-      lump_cost_basis,
       salary,
       match_tier1_pct,
       match_tier2_limit_pct,
       match_tier2_rate_pct,
-      is_credit_card,
+      notes,
       balance_updated_at,
     })
     .select("id")
     .single();
   if (error) throw error;
 
-  // Optional first position (§2: "holdings entry... individual shares").
-  const symbol = String(formData.get("symbol") ?? "").trim().toUpperCase();
-  if (uses_holdings && symbol) {
-    const qty = Number(formData.get("qty") ?? 0);
-    const cost_basis = Number(formData.get("cost_basis") ?? 0);
-    const current_price = Number(formData.get("current_price") ?? 0);
-    const buy_date = String(formData.get("buy_date") ?? "") || null;
-    await supabase.from("holdings").insert({ user_id: user.id, account_id: account.id, symbol, qty, cost_basis, current_price, buy_date });
+  // §5: any initial positions.
+  if (uses_holdings) {
+    const positions = readPositions(formData);
+    if (positions.length > 0) {
+      await supabase.from("holdings").insert(positions.map((p) => ({ user_id: user.id, account_id: account.id, ...p })));
+    }
   }
 
-  // Optional linked rewards card (Liability + "is it a credit card?").
-  if (is_credit_card && type === "Liabilities") {
-    const cardLast4 = String(formData.get("card_last4") ?? "").trim() || null;
-    const cardNetwork = String(formData.get("card_network") ?? "").trim() || null;
-    await supabase.from("cards").insert({
-      user_id: user.id,
-      account_id: account.id,
-      name,
-      last4: cardLast4,
-      network: cardNetwork,
-      color: "#14181C",
-      base_multiplier: 1,
-    });
-  }
-
-  // Optional initial contribution (§2/§5) — tax treatment fixed by type.
+  // §6/§7: optional initial contribution — tax treatment fixed by type.
   const taxTreatment = CONTRIBUTION_TAX_TREATMENT[type];
   const contributionAmount = Number(formData.get("contribution_amount") ?? 0);
   const income_source_id = String(formData.get("income_source_id") ?? "");
@@ -176,43 +168,95 @@ export async function createAccount(formData: FormData): Promise<{ id: string }>
   return { id: account.id };
 }
 
+/**
+ * Rev 06b v2 §1/§4: the liability wizard's step-2 submit. Creates the
+ * account, then always one `liability_loans` row (§4: "defaults to a
+ * single entry"), then — Credit card only — a linked rewards card
+ * (Sweep-selectable; no more "is it a credit card?" toggle, credit card
+ * is just its own type now).
+ */
+export async function createLiabilityAccount(formData: FormData): Promise<{ id: string }> {
+  const { supabase, user } = await requireUser();
+  const name = String(formData.get("name") ?? "").trim();
+  const type = String(formData.get("type") ?? "");
+  const balance = Number(formData.get("balance") ?? 0);
+  const apr_pct = numOrNull(formData, "apr_pct");
+  const icon = String(formData.get("icon") ?? "").trim() || null;
+  const termYears = numOrNull(formData, "term_years");
+  const loan_term_months = termYears != null ? Math.round(termYears * 12) : null;
+  const notes = String(formData.get("notes") ?? "").trim() || null;
+  const balance_updated_at = asOfToISO(formData);
+  const system_key = slugify(name);
+  if (!name || !type) throw new Error("Name and type are required");
+  if (!isAccountType(type) || !LIABILITY_TYPE_SET.has(type)) throw new Error("Invalid liability type");
+
+  const { data: account, error } = await supabase
+    .from("accounts")
+    .insert({ user_id: user.id, name, type, balance, apr_pct, icon, loan_term_months, notes, balance_updated_at, system_key })
+    .select("id")
+    .single();
+  if (error) throw error;
+
+  await supabase.from("liability_loans").insert({ user_id: user.id, account_id: account.id, name, balance, apr_pct });
+
+  if (type === "Credit card") {
+    const cardLast4 = String(formData.get("last4") ?? "").trim() || null;
+    const cardNetwork = String(formData.get("card_network") ?? "").trim() || null;
+    await supabase.from("cards").insert({
+      user_id: user.id,
+      account_id: account.id,
+      name,
+      last4: cardLast4,
+      network: cardNetwork,
+      color: "#14181C",
+      base_multiplier: 1,
+    });
+  }
+
+  revalidatePath("/net-worth");
+  return { id: account.id };
+}
+
 export async function updateAccount(formData: FormData) {
   const { supabase } = await requireUser();
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const type = String(formData.get("type") ?? "");
-  const apy_pctRaw = formData.get("apy_pct");
-  const apy_pct = apy_pctRaw != null && apy_pctRaw !== "" ? Number(apy_pctRaw) : null;
-  const apr_pctRaw = formData.get("apr_pct");
-  const apr_pct = apr_pctRaw != null && apr_pctRaw !== "" ? Number(apr_pctRaw) : null;
-  const annualLimitRaw = formData.get("annual_contribution_limit");
-  const annual_contribution_limit =
-    annualLimitRaw != null && annualLimitRaw !== "" ? Number(annualLimitRaw) : null;
-  const minCashRaw = formData.get("min_cash");
-  const min_cash = minCashRaw != null && minCashRaw !== "" ? Number(minCashRaw) : null;
   const icon = String(formData.get("icon") ?? "").trim() || null;
-  const last4 = String(formData.get("last4") ?? "").trim() || null;
-  const debit_card_last4 = String(formData.get("debit_card_last4") ?? "").trim() || null;
-  const uses_holdings = formData.get("uses_holdings") === "on";
-  const lump_cost_basisRaw = formData.get("lump_cost_basis");
-  const lump_cost_basis = lump_cost_basisRaw != null && lump_cost_basisRaw !== "" ? Number(lump_cost_basisRaw) : null;
-  const salaryRaw = formData.get("salary");
-  const salary = salaryRaw != null && salaryRaw !== "" ? Number(salaryRaw) : null;
-  const match_tier1_pctRaw = formData.get("match_tier1_pct");
-  const match_tier1_pct = match_tier1_pctRaw != null && match_tier1_pctRaw !== "" ? Number(match_tier1_pctRaw) : null;
-  const match_tier2_limit_pctRaw = formData.get("match_tier2_limit_pct");
-  const match_tier2_limit_pct =
-    match_tier2_limit_pctRaw != null && match_tier2_limit_pctRaw !== "" ? Number(match_tier2_limit_pctRaw) : null;
-  const match_tier2_rate_pctRaw = formData.get("match_tier2_rate_pct");
-  const match_tier2_rate_pct =
-    match_tier2_rate_pctRaw != null && match_tier2_rate_pctRaw !== "" ? Number(match_tier2_rate_pctRaw) : null;
-  const is_credit_card = formData.get("is_credit_card") === "on";
-  const balance = Number(formData.get("balance") ?? 0);
-  const starting_contributed = Number(formData.get("starting_contributed") ?? 0);
   const as_ofRaw = String(formData.get("as_of") ?? "");
   const balance_updated_at = as_ofRaw ? new Date(as_ofRaw + "T00:00:00").toISOString() : new Date().toISOString();
   if (!id || !name || !type) throw new Error("Name and type are required");
   if (!isAccountType(type)) throw new Error("Invalid account type");
+
+  if (LIABILITY_TYPE_SET.has(type)) {
+    const apr_pct = numOrNull(formData, "apr_pct");
+    const last4 = String(formData.get("last4") ?? "").trim() || null;
+    const termYears = numOrNull(formData, "term_years");
+  const loan_term_months = termYears != null ? Math.round(termYears * 12) : null;
+    const notes = String(formData.get("notes") ?? "").trim() || null;
+    const { error } = await supabase
+      .from("accounts")
+      .update({ name, type, icon, apr_pct, last4, loan_term_months, notes, balance_updated_at })
+      .eq("id", id);
+    if (error) throw error;
+    revalidatePath("/net-worth");
+    return;
+  }
+
+  const balance = Number(formData.get("balance") ?? 0);
+  const starting_contributed = Number(formData.get("starting_contributed") ?? 0);
+  const apy_pct = numOrNull(formData, "apy_pct");
+  const annual_contribution_limit = numOrNull(formData, "annual_contribution_limit");
+  const min_cash = numOrNull(formData, "min_cash");
+  const last4 = String(formData.get("last4") ?? "").trim() || null;
+  const debit_card_last4 = String(formData.get("debit_card_last4") ?? "").trim() || null;
+  const debit_card_network = String(formData.get("debit_card_network") ?? "").trim() || null;
+  const uses_holdings = formData.get("uses_holdings") === "on";
+  const salary = numOrNull(formData, "salary");
+  const match_tier1_pct = numOrNull(formData, "match_tier1_pct");
+  const match_tier2_limit_pct = numOrNull(formData, "match_tier2_limit_pct");
+  const match_tier2_rate_pct = numOrNull(formData, "match_tier2_rate_pct");
+  const notes = String(formData.get("notes") ?? "").trim() || null;
 
   const { error } = await supabase
     .from("accounts")
@@ -223,34 +267,19 @@ export async function updateAccount(formData: FormData) {
       starting_contributed,
       balance_updated_at,
       apy_pct,
-      apr_pct,
       annual_contribution_limit,
       min_cash,
       icon,
       last4,
       debit_card_last4,
+      debit_card_network,
       uses_holdings,
-      lump_cost_basis,
       salary,
       match_tier1_pct,
       match_tier2_limit_pct,
       match_tier2_rate_pct,
-      is_credit_card,
+      notes,
     })
-    .eq("id", id);
-  if (error) throw error;
-  revalidatePath("/net-worth");
-}
-
-export async function updateStartingContributed(formData: FormData) {
-  const { supabase } = await requireUser();
-  const id = String(formData.get("id") ?? "");
-  const starting_contributed = Number(formData.get("starting_contributed") ?? 0);
-  if (!id) throw new Error("Missing account id");
-
-  const { error } = await supabase
-    .from("accounts")
-    .update({ starting_contributed })
     .eq("id", id);
   if (error) throw error;
   revalidatePath("/net-worth");

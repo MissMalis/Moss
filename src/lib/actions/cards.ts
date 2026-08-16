@@ -238,11 +238,31 @@ export async function payOffCard(formData: FormData) {
     .eq("id", buffer.id);
   if (bufferUpdErr) throw bufferUpdErr;
 
-  const { error: liabilityUpdErr } = await supabase
-    .from("accounts")
-    .update({ balance: Math.max(0, (liability.balance ?? 0) - amount) })
-    .eq("id", liability.id);
-  if (liabilityUpdErr) throw liabilityUpdErr;
+  // Rev 06b v2 §4: a liability's true balance lives on its sub-loan(s), not
+  // accounts.balance (stale since the wizard) — pay down the loan itself.
+  // A card typically has exactly one; if it somehow has several, the first
+  // absorbs the payment.
+  const { data: loans } = await supabase
+    .from("liability_loans")
+    .select("id, balance")
+    .eq("account_id", liability.id)
+    .order("created_at")
+    .limit(1);
+  const primaryLoan = loans?.[0];
+
+  if (primaryLoan) {
+    const { error: loanUpdErr } = await supabase
+      .from("liability_loans")
+      .update({ balance: Math.max(0, primaryLoan.balance - amount) })
+      .eq("id", primaryLoan.id);
+    if (loanUpdErr) throw loanUpdErr;
+  } else {
+    const { error: liabilityUpdErr } = await supabase
+      .from("accounts")
+      .update({ balance: Math.max(0, (liability.balance ?? 0) - amount) })
+      .eq("id", liability.id);
+    if (liabilityUpdErr) throw liabilityUpdErr;
+  }
 
   revalidateSweepAndNetWorth();
 }

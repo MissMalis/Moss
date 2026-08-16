@@ -14,6 +14,7 @@ import { INPUT } from "@/lib/ui";
  */
 export function HoldingFields({
   formId,
+  index,
   symbolDefault = "",
   qtyDefault = 0,
   costBasisDefault = 0,
@@ -21,12 +22,15 @@ export function HoldingFields({
   priceDefault = 0,
 }: {
   formId?: string;
+  /** Suffixes every field name (`symbol_0`, `qty_0`, ...) — the wizard's multi-"Add position" rows. */
+  index?: number;
   symbolDefault?: string;
   qtyDefault?: number;
   costBasisDefault?: number;
   buyDateDefault?: string;
   priceDefault?: number;
 }) {
+  const suffix = index != null ? `_${index}` : "";
   const [symbol, setSymbol] = useState(symbolDefault);
   const [price, setPrice] = useState<number>(priceDefault);
   const [locked, setLocked] = useState(false);
@@ -60,7 +64,7 @@ export function HoldingFields({
     <>
       <input
         form={formId}
-        name="symbol"
+        name={`symbol${suffix}`}
         value={symbol}
         onChange={(e) => {
           setSymbol(e.target.value);
@@ -74,7 +78,7 @@ export function HoldingFields({
         form={formId}
         type="number"
         step="0.0001"
-        name="qty"
+        name={`qty${suffix}`}
         defaultValue={qtyDefault}
         className={`w-full py-1 text-right text-[12.5px] ${INPUT}`}
       />
@@ -82,22 +86,23 @@ export function HoldingFields({
         form={formId}
         type="number"
         step="0.0001"
-        name="cost_basis"
+        name={`cost_basis${suffix}`}
         defaultValue={costBasisDefault}
         className={`w-full py-1 text-right text-[12.5px] ${INPUT}`}
       />
       <input
         form={formId}
         type="date"
-        name="buy_date"
+        name={`buy_date${suffix}`}
         defaultValue={buyDateDefault}
+        style={{ colorScheme: "light" }}
         className={`w-full py-1 text-[12.5px] ${INPUT}`}
       />
       <input
         form={formId}
         type="number"
         step="0.0001"
-        name="current_price"
+        name={`current_price${suffix}`}
         value={price}
         onChange={(e) => setPrice(Number(e.target.value))}
         readOnly={locked}

@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import { updateAccount } from "@/lib/actions/accounts";
-import { ACCOUNT_TYPES } from "@/lib/account-types";
-import { accountTypeLabel, HOLDINGS_TYPES } from "@/lib/net-worth";
+import { accountTypeLabel } from "@/lib/net-worth";
+import { getAssetFieldConfig, assetShowsBalanceField, assetShowsLumpCostBasis } from "@/lib/account-field-config";
 import { formatMoney, formatShortDateLabel } from "@/lib/format";
 import { IconPicker } from "@/components/IconPicker";
 import { ActionForm } from "@/components/ActionForm";
+import { Employer401kMatchFields } from "@/components/Employer401kMatchFields";
 import { Tooltip } from "@/components/Tooltip";
 import { BTN_GHOST, BTN_SOLID, CARD, CARD_HEADER, INPUT, LABEL } from "@/lib/ui";
 
@@ -18,22 +19,23 @@ type AccountRow = {
   balance: number;
   starting_contributed: number;
   apy_pct: number | null;
-  apr_pct: number | null;
   min_cash: number | null;
   annual_contribution_limit: number | null;
   last4: string | null;
   debit_card_last4: string | null;
+  debit_card_network: string | null;
   uses_holdings: boolean;
-  lump_cost_basis: number | null;
   salary: number | null;
   match_tier1_pct: number | null;
   match_tier2_limit_pct: number | null;
   match_tier2_rate_pct: number | null;
-  is_credit_card: boolean;
+  notes: string | null;
   balance_updated_at: string | null;
 };
 
-const INVESTING_TOGGLE_TYPES = new Set(["401(k)", "Traditional IRA", "Roth IRA", "Taxable Brokerage"]);
+function mask(last4: string | null): string | null {
+  return last4 ? `x${last4}` : null;
+}
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   if (value == null || value === "") return null;
@@ -46,17 +48,18 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 /**
- * Rev 06b §3: read-only by default (prevents accidental edits from live
- * inputs) with an Edit button that opens the full form — covers name/type/
- * icon plus every type-specific field the wizard captures.
+ * Rev 06b v2 §3/§8: an ASSET's detail/edit — read-only by default with an
+ * Edit button. Uses the exact same `getAssetFieldConfig` the wizard uses,
+ * so a checking account can never show APY/min-cash/annual-limit here
+ * either (the bug this revision fixes).
  */
 export function AccountDetailsSection({ account }: { account: AccountRow }) {
   const [editing, setEditing] = useState(false);
-  const isHSA = account.type === "HSA";
-  const isInvesting = INVESTING_TOGGLE_TYPES.has(account.type);
+  const cfg = getAssetFieldConfig(account.type);
   const [usesHoldings, setUsesHoldings] = useState(account.uses_holdings);
-  const [isCreditCard, setIsCreditCard] = useState(account.is_credit_card);
   const [showDebitCard, setShowDebitCard] = useState(!!account.debit_card_last4);
+  const showsBalance = assetShowsBalanceField(cfg, usesHoldings);
+  const showsLumpCostBasis = assetShowsLumpCostBasis(cfg, usesHoldings);
 
   if (!editing) {
     return (
@@ -69,29 +72,31 @@ export function AccountDetailsSection({ account }: { account: AccountRow }) {
         </div>
         <div className="mt-2">
           <Row label="Type" value={accountTypeLabel(account.type)} />
-          {(!HOLDINGS_TYPES.has(account.type) || isHSA || !account.uses_holdings) && (
-            <Row label={isHSA ? "Cash sleeve" : "Balance"} value={formatMoney(account.balance ?? 0)} />
-          )}
+          {showsBalance && <Row label={cfg.alwaysBothCashAndHoldings ? "Cash sleeve" : "Balance"} value={formatMoney(account.balance ?? 0)} />}
           <Row label="As of" value={account.balance_updated_at ? formatShortDateLabel(account.balance_updated_at.slice(0, 10)) : null} />
-          <Row label="Last 4" value={account.last4} />
-          <Row label="Linked card" value={account.debit_card_last4 ? `···· ${account.debit_card_last4}` : null} />
-          <Row label="APY" value={account.apy_pct ? `${account.apy_pct}%` : null} />
-          <Row label="APR" value={account.apr_pct ? `${account.apr_pct}%` : null} />
-          <Row label="Minimum-cash threshold" value={account.min_cash != null ? formatMoney(account.min_cash) : null} />
-          <Row label="Annual limit" value={account.annual_contribution_limit != null ? formatMoney(account.annual_contribution_limit) : null} />
-          <Row label="Total contributions" value={account.starting_contributed ? formatMoney(account.starting_contributed) : null} />
-          {isInvesting && <Row label="Tracking" value={account.uses_holdings ? "Individual shares" : "Lump total"} />}
-          {!account.uses_holdings && isInvesting && (
-            <Row label="Cost basis" value={account.lump_cost_basis != null ? formatMoney(account.lump_cost_basis) : null} />
+          {cfg.showsLast4 && <Row label="Account #" value={mask(account.last4)} />}
+          {(cfg.showsLinkedCard || cfg.showsDebitCardLast4) && (
+            <Row label="Linked card" value={account.debit_card_last4 ? `${account.debit_card_network ?? ""} ${mask(account.debit_card_last4)}`.trim() : null} />
           )}
-          <Row label="Salary" value={account.salary != null ? formatMoney(account.salary) + "/yr" : null} />
-          {account.match_tier1_pct != null && (
-            <Row
-              label="Employer match"
-              value={`100% up to ${account.match_tier1_pct}%, then ${account.match_tier2_rate_pct}% up to ${account.match_tier2_limit_pct}%`}
-            />
+          {cfg.showsAPY && <Row label="APY" value={account.apy_pct ? `${account.apy_pct}%` : null} />}
+          {cfg.showsMinCash && <Row label="Minimum-cash threshold" value={account.min_cash != null ? formatMoney(account.min_cash) : null} />}
+          {cfg.showsAnnualLimit && (
+            <Row label="Annual limit" value={account.annual_contribution_limit != null ? formatMoney(account.annual_contribution_limit) : null} />
           )}
-          <Row label="Credit card" value={account.is_credit_card ? "Yes" : null} />
+          {cfg.isHoldingsToggle && <Row label="Tracking" value={usesHoldings ? "Individual shares" : "Lump total"} />}
+          {showsLumpCostBasis && <Row label="Cost basis" value={account.starting_contributed ? formatMoney(account.starting_contributed) : null} />}
+          {cfg.showsSalaryAndMatch && (
+            <>
+              <Row label="Salary" value={account.salary != null ? formatMoney(account.salary) + "/yr" : null} />
+              {account.match_tier1_pct != null && (
+                <Row
+                  label="Employer match"
+                  value={`100% up to ${account.match_tier1_pct}%, then ${account.match_tier2_rate_pct}% up to ${account.match_tier2_limit_pct}%`}
+                />
+              )}
+            </>
+          )}
+          {cfg.showsNotes && <Row label="Notes" value={account.notes} />}
         </div>
       </section>
     );
@@ -102,6 +107,7 @@ export function AccountDetailsSection({ account }: { account: AccountRow }) {
       <p className={CARD_HEADER}>Details</p>
       <ActionForm action={updateAccount} onSuccess={() => setEditing(false)} className="mt-3 flex flex-col gap-3">
         <input type="hidden" name="id" value={account.id} />
+        <input type="hidden" name="type" value={account.type} />
         <div className="flex flex-wrap items-end gap-3">
           <label className={LABEL}>
             Icon
@@ -111,22 +117,12 @@ export function AccountDetailsSection({ account }: { account: AccountRow }) {
             Name
             <input name="name" defaultValue={account.name} className={INPUT} />
           </label>
-          <label className={LABEL}>
-            Type
-            <select name="type" defaultValue={account.type} className={INPUT}>
-              {ACCOUNT_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {accountTypeLabel(t)}
-                </option>
-              ))}
-            </select>
-          </label>
         </div>
 
-        {(!isInvesting || !usesHoldings) && (
+        {showsBalance && (
           <div className="flex flex-wrap items-end gap-3">
             <label className={LABEL}>
-              {isHSA ? "Cash sleeve" : "Balance"}
+              {cfg.alwaysBothCashAndHoldings ? "Cash sleeve" : "Balance"}
               <input type="number" step="0.01" name="balance" defaultValue={account.balance ?? 0} className={`w-32 ${INPUT}`} />
             </label>
             <label className={LABEL}>
@@ -139,39 +135,64 @@ export function AccountDetailsSection({ account }: { account: AccountRow }) {
                 className={INPUT}
               />
             </label>
+            {cfg.showsAPY && (
+              <label className={LABEL}>
+                APY %
+                <input type="number" step="0.01" name="apy_pct" defaultValue={account.apy_pct ?? ""} className={`w-20 ${INPUT}`} />
+              </label>
+            )}
           </div>
         )}
 
-        <div className="flex flex-wrap items-end gap-3">
-          <label className={LABEL}>
-            Last 4
-            <input name="last4" defaultValue={account.last4 ?? ""} maxLength={4} className={`w-20 ${INPUT}`} />
-          </label>
-          <label className="flex items-center gap-1.5 pb-2 text-[12.5px] text-ink-2">
-            <input type="checkbox" checked={showDebitCard} onChange={(e) => setShowDebitCard(e.target.checked)} />
-            Linked card?
-          </label>
-          {showDebitCard && (
+        {cfg.showsLast4 && (
+          <div className="flex flex-wrap items-end gap-3">
             <label className={LABEL}>
-              Last 4 of card
-              <input name="debit_card_last4" defaultValue={account.debit_card_last4 ?? ""} maxLength={4} className={`w-20 ${INPUT}`} />
+              Last 4 of account #
+              <input name="last4" defaultValue={account.last4 ?? ""} maxLength={4} className={`w-24 ${INPUT}`} />
             </label>
-          )}
-        </div>
+            <label className="flex items-center gap-1.5 pb-2 text-[12.5px] text-ink-2">
+              <input type="checkbox" checked={showDebitCard} onChange={(e) => setShowDebitCard(e.target.checked)} />
+              Linked card?
+            </label>
+            {showDebitCard && (
+              <>
+                <label className={LABEL}>
+                  Card type
+                  <select name="debit_card_network" defaultValue={account.debit_card_network ?? "Visa"} className={INPUT}>
+                    {["Visa", "Mastercard", "Amex", "Discover"].map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className={LABEL}>
+                  Last 4 of card
+                  <input name="debit_card_last4" defaultValue={account.debit_card_last4 ?? ""} maxLength={4} className={`w-24 ${INPUT}`} />
+                </label>
+              </>
+            )}
+          </div>
+        )}
 
-        <div className="flex flex-wrap items-end gap-3">
-          <label className={LABEL}>
-            APY %
-            <input type="number" step="0.01" name="apy_pct" defaultValue={account.apy_pct ?? ""} className={`w-16 ${INPUT}`} />
-          </label>
-          <label className={LABEL}>
-            APR %
-            <input type="number" step="0.01" name="apr_pct" defaultValue={account.apr_pct ?? ""} className={`w-16 ${INPUT}`} />
-          </label>
-          <label className={LABEL}>
-            Min cash
-            <input type="number" step="0.01" name="min_cash" defaultValue={account.min_cash ?? ""} className={`w-20 ${INPUT}`} />
-          </label>
+        {(cfg.showsMinCash || cfg.showsDebitCardLast4) && (
+          <div className="flex flex-wrap items-end gap-3">
+            {cfg.showsMinCash && (
+              <label className={LABEL}>
+                Minimum-cash threshold
+                <input type="number" step="0.01" name="min_cash" defaultValue={account.min_cash ?? ""} className={`w-28 ${INPUT}`} />
+              </label>
+            )}
+            {cfg.showsDebitCardLast4 && (
+              <label className={LABEL}>
+                Debit-card last 4
+                <input name="debit_card_last4" defaultValue={account.debit_card_last4 ?? ""} maxLength={4} className={`w-24 ${INPUT}`} />
+              </label>
+            )}
+          </div>
+        )}
+
+        {cfg.showsAnnualLimit && (
           <label className={LABEL}>
             Annual limit
             <input
@@ -179,65 +200,48 @@ export function AccountDetailsSection({ account }: { account: AccountRow }) {
               step="0.01"
               name="annual_contribution_limit"
               defaultValue={account.annual_contribution_limit ?? ""}
-              className={`w-24 ${INPUT}`}
+              className={`w-28 ${INPUT}`}
             />
-          </label>
-          <label className={LABEL}>
-            <span className="flex items-center gap-1">
-              Total contributions
-              <Tooltip text="What you've put in overall, including anything from before Moss — used to show growth vs. contributions." />
-            </span>
-            <input type="number" step="0.01" name="starting_contributed" defaultValue={account.starting_contributed ?? 0} className={`w-28 ${INPUT}`} />
-          </label>
-        </div>
-
-        {account.type === "Liabilities" && (
-          <label className="flex items-center gap-1.5 text-[12.5px] text-ink-2">
-            <input type="checkbox" name="is_credit_card" checked={isCreditCard} onChange={(e) => setIsCreditCard(e.target.checked)} />
-            Is it a credit card?
-            <Tooltip text="A credit-card liability becomes selectable as a rewards card in Sweep." />
           </label>
         )}
 
-        {isInvesting && (
+        {cfg.isHoldingsToggle && (
           <div className="rounded-lg border border-border bg-card-soft p-3">
             <label className="flex items-center gap-1.5 text-[12.5px] text-ink-2">
-              <input
-                type="checkbox"
-                name="uses_holdings"
-                checked={usesHoldings}
-                onChange={(e) => setUsesHoldings(e.target.checked)}
-              />
+              <input type="checkbox" name="uses_holdings" checked={usesHoldings} onChange={(e) => setUsesHoldings(e.target.checked)} />
               Track individual shares (unchecked = a single lump balance)
             </label>
             {!usesHoldings && (
               <label className={`mt-2 ${LABEL}`}>
-                Total cost basis
-                <input type="number" step="0.01" name="lump_cost_basis" defaultValue={account.lump_cost_basis ?? 0} className={`w-32 ${INPUT}`} />
+                <span className="flex items-center gap-1">
+                  Total cost basis
+                  <Tooltip text="What you've put in overall — used to show growth vs. contributions." />
+                </span>
+                <input type="number" step="0.01" name="starting_contributed" defaultValue={account.starting_contributed ?? 0} className={`w-32 ${INPUT}`} />
               </label>
             )}
           </div>
         )}
 
-        {account.type === "401(k)" && (
-          <div className="flex flex-wrap items-end gap-3">
+        {cfg.showsSalaryAndMatch && (
+          <div className="flex flex-col gap-2 rounded-lg border border-border bg-card-soft p-3">
             <label className={LABEL}>
               Salary (annual)
-              <input type="number" step="0.01" name="salary" defaultValue={account.salary ?? ""} className={`w-28 ${INPUT}`} />
+              <input type="number" step="0.01" name="salary" defaultValue={account.salary ?? ""} className={`w-32 ${INPUT}`} />
             </label>
-            <label className={LABEL}>
-              Match: 100% up to
-              <input type="number" step="0.1" name="match_tier1_pct" defaultValue={account.match_tier1_pct ?? ""} className={`w-20 ${INPUT}`} />%
-            </label>
-            <label className={LABEL}>
-              then
-              <input type="number" step="0.1" name="match_tier2_rate_pct" defaultValue={account.match_tier2_rate_pct ?? ""} className={`w-20 ${INPUT}`} />%
-            </label>
-            <label className={LABEL}>
-              up to
-              <input type="number" step="0.1" name="match_tier2_limit_pct" defaultValue={account.match_tier2_limit_pct ?? ""} className={`w-20 ${INPUT}`} />%
-            </label>
+            <Employer401kMatchFields
+              tier1Default={account.match_tier1_pct ?? undefined}
+              tier2RateDefault={account.match_tier2_rate_pct ?? undefined}
+              tier2LimitDefault={account.match_tier2_limit_pct ?? undefined}
+            />
           </div>
+        )}
+
+        {cfg.showsNotes && (
+          <label className={LABEL}>
+            Notes
+            <textarea name="notes" defaultValue={account.notes ?? ""} rows={2} className={`${INPUT} resize-none`} />
+          </label>
         )}
 
         <div className="flex justify-end gap-2">

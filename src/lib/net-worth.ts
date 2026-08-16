@@ -1,9 +1,12 @@
-// Pure net-worth aggregation. An account's value is its stored `balance`
+// Pure net-worth aggregation. An asset's value is its stored `balance`
 // (the cash sleeve — brief rev 02 §4: "contributions always land in cash
 // first") plus whatever holdings it has, if any. For a plain Cash account
 // or a "lump" investable account with no positions entered, holdings value
-// is simply zero, so this reduces to the balance alone. Liabilities
-// balances are stored positive and subtracted.
+// is simply zero, so this reduces to the balance alone. A liability's
+// value is the balance-weighted rollup of its sub-loans (rev 06b v2 §4) —
+// falling back to its own `balance` for legacy rows that never got one.
+
+import { LIABILITY_TYPE_SET, HOLDINGS_TOGGLE_TYPES } from "@/lib/account-types";
 
 export interface AccountForNetWorth {
   id: string;
@@ -16,6 +19,11 @@ export interface HoldingForNetWorth {
   account_id: string | null;
   qty: number;
   current_price: number;
+}
+
+export interface LiabilityLoanForNetWorth {
+  account_id: string;
+  balance: number;
 }
 
 export interface AccountValuation {
@@ -34,6 +42,7 @@ export interface NetWorthResult {
 export function computeNetWorth(
   accounts: AccountForNetWorth[],
   holdings: HoldingForNetWorth[],
+  liabilityLoans: LiabilityLoanForNetWorth[] = [],
 ): NetWorthResult {
   const holdingsValueByAccount = new Map<string, number>();
   for (const h of holdings) {
@@ -45,11 +54,20 @@ export function computeNetWorth(
     );
   }
 
+  const loanTotalByAccount = new Map<string, number>();
+  const hasLoans = new Set<string>();
+  for (const l of liabilityLoans) {
+    hasLoans.add(l.account_id);
+    loanTotalByAccount.set(l.account_id, (loanTotalByAccount.get(l.account_id) ?? 0) + l.balance);
+  }
+
   const accountValues: AccountValuation[] = accounts.map((a) => {
+    if (LIABILITY_TYPE_SET.has(a.type)) {
+      const rawValue = hasLoans.has(a.id) ? (loanTotalByAccount.get(a.id) ?? 0) : a.balance;
+      return { id: a.id, name: a.name, type: a.type, value: -Math.abs(rawValue) };
+    }
     const holdingsValue = holdingsValueByAccount.get(a.id) ?? 0;
-    const rawValue = a.balance + holdingsValue;
-    const value = a.type === "Liabilities" ? -Math.abs(rawValue) : rawValue;
-    return { id: a.id, name: a.name, type: a.type, value };
+    return { id: a.id, name: a.name, type: a.type, value: a.balance + holdingsValue };
   });
 
   const byType: Record<string, number> = {};
@@ -62,15 +80,25 @@ export function computeNetWorth(
   return { total, byType, accounts: accountValues };
 }
 
-// Rev 04 §5: display-only relabeling. The stored `type` values (and every
-// internal comparison against them) are untouched — same pattern as
-// `system_key`/`payment_source` staying internal identifiers while the UI
-// shows something friendlier.
+/** Balance-weighted APR across a liability's sub-loans (rev 06b v2 §4: "$38,000 · 6.4% blended"). */
+export function blendedApr(loans: { balance: number; apr_pct: number | null }[]): number | null {
+  const total = loans.reduce((s, l) => s + l.balance, 0);
+  if (total <= 0) return null;
+  const weighted = loans.reduce((s, l) => s + l.balance * (l.apr_pct ?? 0), 0);
+  return Math.round((weighted / total) * 1000) / 1000;
+}
+
+// Rev 04 §5 / Rev 06b v2 §2: display-only relabeling. The stored `type`
+// values (and every internal comparison against them) are untouched —
+// same pattern as `system_key`/`payment_source` staying internal
+// identifiers while the UI shows something friendlier.
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   HYSA: "High-Yield Savings Account",
+  HSA: "Health Savings Account (HSA)",
   "Stored-value": "Prepaid / reloadable",
   Liabilities: "Liability",
   "401(k)": "401(k) / 403(b)",
+  "Other Debt": "Other",
 };
 
 export function accountTypeLabel(type: string): string {
@@ -78,15 +106,14 @@ export function accountTypeLabel(type: string): string {
 }
 
 // §5 account-builder fixes: holdings only exist for true investing types;
-// HSA is cash-sleeve-only now (real HSAs can have both, but this revision
-// simplifies HSA to cash so there's exactly one "has a genuine cash
-// balance alongside holdings" type — none — everything else is one or the
-// other). Every other type shows a plain balance (not framed as a "cash
-// sleeve", since there's nothing else in the account to sit alongside).
-export const HOLDINGS_TYPES = new Set(["401(k)", "Roth IRA", "Traditional IRA", "Taxable Brokerage"]);
+// HSA always shows both a cash sleeve and holdings (rev 06b v2 §3 — the
+// rev 05 cash-sleeve-only simplification was reverted). Every other type
+// shows a plain balance (not framed as a "cash sleeve", since there's
+// nothing else in the account to sit alongside).
+export const HOLDINGS_TYPES = HOLDINGS_TOGGLE_TYPES;
 
 export function accountGroup(type: string): "Investments" | "Cash" | "Liabilities" {
-  if (type === "Liabilities") return "Liabilities";
+  if (LIABILITY_TYPE_SET.has(type)) return "Liabilities";
   if (HOLDINGS_TYPES.has(type) || type === "HSA") return "Investments";
   return "Cash";
 }

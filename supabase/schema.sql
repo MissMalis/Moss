@@ -672,3 +672,39 @@ alter table recurring_items add column if not exists apply_tax boolean not null 
 -- per-item tax rules.
 alter table settings add column if not exists location text;
 alter table settings add column if not exists tax_rate_pct numeric(5,3);
+
+-- ============================================================
+-- Moss — Revision 06b v2
+-- ============================================================
+
+-- §4: a liability's sub-loans — the "holdings" equivalent for debt. Every
+-- liability account gets at least one row (its own balance/APR); the user
+-- can add more (e.g. multiple student loans) and the account's rolled-up
+-- total + blended APR are computed from these, same pattern as holdings.
+create table if not exists liability_loans (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users on delete cascade not null,
+  account_id uuid references accounts on delete cascade not null,
+  name text not null,
+  balance numeric(12,2) not null default 0,
+  apr_pct numeric(5,3),
+  created_at timestamptz default now()
+);
+
+alter table liability_loans enable row level security;
+drop policy if exists "liability_loans_owner" on liability_loans;
+create policy "liability_loans_owner" on liability_loans
+  for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+create index if not exists liability_loans_account_idx on liability_loans (account_id);
+
+-- §2: an "Other" asset's free-text notes.
+alter table accounts add column if not exists notes text;
+
+-- §4: auto loan / mortgage term, in months.
+alter table accounts add column if not exists loan_term_months integer;
+
+-- §3: the linked debit card's network (Checking/Savings/HYSA "linked
+-- card?" toggle -> card type dropdown + last 4, already on
+-- debit_card_last4).
+alter table accounts add column if not exists debit_card_network text;
