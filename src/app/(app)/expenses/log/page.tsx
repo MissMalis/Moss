@@ -2,6 +2,7 @@ import { listCategories, listRecurringItems, listOccurrencesInRange } from "@/li
 import { listPurchasesInRange } from "@/lib/data/income";
 import { listAccounts } from "@/lib/data/accounts";
 import { listCards } from "@/lib/data/cards";
+import { getSettings } from "@/lib/data/settings";
 import { deletePurchase } from "@/lib/actions/income";
 import { buildOccurrencesForWindow } from "@/lib/recurring";
 import { LogExpenseForm } from "@/components/LogExpenseForm";
@@ -24,13 +25,14 @@ function currentMonthWindow() {
 
 export default async function LogExpensePage() {
   const { start, end } = currentMonthWindow();
-  const [categories, items, occurrenceRows, purchases, accounts, cards] = await Promise.all([
+  const [categories, items, occurrenceRows, purchases, accounts, cards, settings] = await Promise.all([
     listCategories(),
     listRecurringItems(),
     listOccurrencesInRange(start, end),
     listPurchasesInRange(start, end),
     listAccounts(),
     listCards(),
+    getSettings(),
   ]);
 
   const investingAccounts = accounts.filter((a) => INVESTING_TYPES.has(a.type));
@@ -75,6 +77,8 @@ export default async function LogExpensePage() {
             storedValueAccounts={storedValueAccounts}
             cards={cards.map((c) => ({ id: c.id, name: c.name }))}
             categories={categories.map((c) => ({ id: c.id, name: c.name }))}
+            taxRatePct={settings.tax_rate_pct}
+            location={settings.location}
           />
         </div>
       </div>

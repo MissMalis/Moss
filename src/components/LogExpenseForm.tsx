@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createPurchase } from "@/lib/actions/income";
+import { Tooltip } from "@/components/Tooltip";
 import { BTN_SOLID, INPUT, LABEL } from "@/lib/ui";
 
 type PaymentSource = "checking" | "investing" | "stored_value" | "rewards_card";
@@ -26,11 +27,15 @@ export function LogExpenseForm({
   storedValueAccounts,
   cards = [],
   categories = [],
+  taxRatePct = null,
+  location = null,
 }: {
   investingAccounts: AccountOption[];
   storedValueAccounts: AccountOption[];
   cards?: CardOption[];
   categories?: CategoryOption[];
+  taxRatePct?: number | null;
+  location?: string | null;
 }) {
   const [source, setSource] = useState<PaymentSource>("checking");
 
@@ -121,6 +126,13 @@ export function LogExpenseForm({
       <label className="flex items-center gap-1.5 pb-2 text-[12.5px] text-ink-2">
         <input type="checkbox" name="apply_tax" />
         Add tax
+        <Tooltip
+          text={
+            taxRatePct
+              ? `Applies your ${location ?? "location"}'s ${taxRatePct}% sales-tax rate to the amount above.`
+              : "Applies your location's sales-tax rate to the amount above — set one in Settings."
+          }
+        />
       </label>
 
       <button type="submit" className={BTN_SOLID}>

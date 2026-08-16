@@ -50,7 +50,7 @@ function TypeGrid<T extends string>({ types, onPick }: { types: readonly T[]; on
           key={t}
           type="button"
           onClick={() => onPick(t)}
-          className="flex items-center justify-center rounded-lg border border-border px-3 py-3 text-center text-[13.5px] text-ink transition hover:border-border-strong hover:bg-card-soft"
+          className="flex h-20 items-center justify-center rounded-lg border border-border px-3 text-center text-[13px] leading-snug text-ink transition hover:border-border-strong hover:bg-card-soft"
         >
           {accountTypeLabel(t)}
         </button>
@@ -112,7 +112,7 @@ export function AddLiabilityButton() {
 
   return (
     <>
-      <button type="button" onClick={() => setStep("type")} className={BTN_GHOST}>
+      <button type="button" onClick={() => setStep("type")} className={BTN_SOLID}>
         Add liability
       </button>
 
@@ -190,7 +190,7 @@ function AssetDetailsForm({
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
-        {showsBalance && (
+        {showsBalance && !cfg.isHoldingsToggle && (
           <label className={LABEL}>
             {cfg.alwaysBothCashAndHoldings ? "Cash sleeve" : "Balance"}
             <input type="number" step="0.01" name="balance" defaultValue={0} className={`w-32 ${INPUT}`} />
@@ -282,10 +282,16 @@ function AssetDetailsForm({
             </button>
           </div>
           {showsLumpCostBasis && (
-            <label className={LABEL}>
-              Total cost basis
-              <input type="number" step="0.01" name="starting_contributed" defaultValue={0} className={`w-32 ${INPUT}`} />
-            </label>
+            <div className="flex flex-wrap items-end gap-3">
+              <label className={LABEL}>
+                Total value
+                <input type="number" step="0.01" name="balance" defaultValue={0} className={`w-32 ${INPUT}`} />
+              </label>
+              <label className={LABEL}>
+                Total cost basis
+                <input type="number" step="0.01" name="starting_contributed" defaultValue={0} className={`w-32 ${INPUT}`} />
+              </label>
+            </div>
           )}
         </div>
       )}

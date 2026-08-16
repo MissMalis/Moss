@@ -2,6 +2,9 @@ import Link from "next/link";
 import { listCategories, listRecurringItems, listOccurrencesInRange } from "@/lib/data/recurring";
 import { listIncomeSourcesWithVersions, listPurchasesInRange } from "@/lib/data/income";
 import { listBudgets } from "@/lib/data/budgets";
+import { listAccounts } from "@/lib/data/accounts";
+import { listCards } from "@/lib/data/cards";
+import { getSettings } from "@/lib/data/settings";
 import { createRecurringItem, updateRecurringItem, toggleRecurringItemActive, deleteRecurringItem } from "@/lib/actions/recurring";
 import { buildOccurrencesForWindow, sumEarmarked } from "@/lib/recurring";
 import { computeBudgetProgress } from "@/lib/budgets";
@@ -20,11 +23,13 @@ import { RowMenu } from "@/components/RowMenu";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
 import { RecentList } from "@/components/RecentList";
 import { SpendingRing } from "@/components/SpendingRing";
+import { LogExpenseForm } from "@/components/LogExpenseForm";
 import { Tooltip } from "@/components/Tooltip";
 import { lucideKey } from "@/lib/icons";
-import { BTN_GHOST, BTN_SOLID, CARD, CARD_HEADER, INPUT, LABEL, LINK_QUIET, SCROLL_LIST } from "@/lib/ui";
+import { BTN_SOLID, CARD, CARD_HEADER, INPUT, LABEL, LINK_QUIET, SCROLL_LIST } from "@/lib/ui";
 
 const DEFAULT_CATEGORY_ICON = lucideKey("credit-card");
+const INVESTING_TYPES = new Set(["HSA", "401(k)", "Roth IRA", "Traditional IRA", "Taxable Brokerage"]);
 
 function currentMonthWindow() {
   const now = new Date();
@@ -36,13 +41,18 @@ function currentMonthWindow() {
 export default async function RecurringBillsPage() {
   const todayISO = new Date().toISOString().slice(0, 10);
   const { start, end } = currentMonthWindow();
-  const [categories, items, incomeSources, monthPurchases, budgetRows] = await Promise.all([
+  const [categories, items, incomeSources, monthPurchases, budgetRows, accounts, cards, settings] = await Promise.all([
     listCategories(),
     listRecurringItems(),
     listIncomeSourcesWithVersions(),
     listPurchasesInRange(start, end),
     listBudgets(),
+    listAccounts(),
+    listCards(),
+    getSettings(),
   ]);
+  const investingAccounts = accounts.filter((a) => INVESTING_TYPES.has(a.type));
+  const storedValueAccounts = accounts.filter((a) => a.type === "Stored-value");
 
   const primarySource = incomeSources.find((s) => s.freq !== "one-off") ?? null;
   const windows = primarySource ? windowsAround(primarySource, todayISO) : [];
@@ -109,9 +119,16 @@ export default async function RecurringBillsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Link href="/expenses/log" className={BTN_GHOST}>
-            + Log an expense
-          </Link>
+          <AddButton label="+ Log an expense">
+            <LogExpenseForm
+              investingAccounts={investingAccounts}
+              storedValueAccounts={storedValueAccounts}
+              cards={cards.map((c) => ({ id: c.id, name: c.name }))}
+              categories={categories.map((c) => ({ id: c.id, name: c.name }))}
+              taxRatePct={settings.tax_rate_pct}
+              location={settings.location}
+            />
+          </AddButton>
           <AddButton label="+ Add a bill">
             <form action={createRecurringItem} className="flex flex-wrap items-end gap-3">
               <label className={LABEL}>

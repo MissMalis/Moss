@@ -72,7 +72,12 @@ export function AccountDetailsSection({ account }: { account: AccountRow }) {
         </div>
         <div className="mt-2">
           <Row label="Type" value={accountTypeLabel(account.type)} />
-          {showsBalance && <Row label={cfg.alwaysBothCashAndHoldings ? "Cash sleeve" : "Balance"} value={formatMoney(account.balance ?? 0)} />}
+          {showsBalance && (
+            <Row
+              label={cfg.alwaysBothCashAndHoldings ? "Cash sleeve" : cfg.isHoldingsToggle ? "Total value" : "Balance"}
+              value={formatMoney(account.balance ?? 0)}
+            />
+          )}
           <Row label="As of" value={account.balance_updated_at ? formatShortDateLabel(account.balance_updated_at.slice(0, 10)) : null} />
           {cfg.showsLast4 && <Row label="Account #" value={mask(account.last4)} />}
           {(cfg.showsLinkedCard || cfg.showsDebitCardLast4) && (
@@ -119,30 +124,30 @@ export function AccountDetailsSection({ account }: { account: AccountRow }) {
           </label>
         </div>
 
-        {showsBalance && (
-          <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-wrap items-end gap-3">
+          {showsBalance && !cfg.isHoldingsToggle && (
             <label className={LABEL}>
               {cfg.alwaysBothCashAndHoldings ? "Cash sleeve" : "Balance"}
               <input type="number" step="0.01" name="balance" defaultValue={account.balance ?? 0} className={`w-32 ${INPUT}`} />
             </label>
+          )}
+          <label className={LABEL}>
+            As of
+            <input
+              type="date"
+              name="as_of"
+              defaultValue={account.balance_updated_at?.slice(0, 10)}
+              style={{ colorScheme: "light" }}
+              className={INPUT}
+            />
+          </label>
+          {cfg.showsAPY && (
             <label className={LABEL}>
-              As of
-              <input
-                type="date"
-                name="as_of"
-                defaultValue={account.balance_updated_at?.slice(0, 10)}
-                style={{ colorScheme: "light" }}
-                className={INPUT}
-              />
+              APY %
+              <input type="number" step="0.01" name="apy_pct" defaultValue={account.apy_pct ?? ""} className={`w-20 ${INPUT}`} />
             </label>
-            {cfg.showsAPY && (
-              <label className={LABEL}>
-                APY %
-                <input type="number" step="0.01" name="apy_pct" defaultValue={account.apy_pct ?? ""} className={`w-20 ${INPUT}`} />
-              </label>
-            )}
-          </div>
-        )}
+          )}
+        </div>
 
         {cfg.showsLast4 && (
           <div className="flex flex-wrap items-end gap-3">
@@ -212,13 +217,19 @@ export function AccountDetailsSection({ account }: { account: AccountRow }) {
               Track individual shares (unchecked = a single lump balance)
             </label>
             {!usesHoldings && (
-              <label className={`mt-2 ${LABEL}`}>
-                <span className="flex items-center gap-1">
-                  Total cost basis
-                  <Tooltip text="What you've put in overall — used to show growth vs. contributions." />
-                </span>
-                <input type="number" step="0.01" name="starting_contributed" defaultValue={account.starting_contributed ?? 0} className={`w-32 ${INPUT}`} />
-              </label>
+              <div className="mt-2 flex flex-wrap items-end gap-3">
+                <label className={LABEL}>
+                  Total value
+                  <input type="number" step="0.01" name="balance" defaultValue={account.balance ?? 0} className={`w-32 ${INPUT}`} />
+                </label>
+                <label className={LABEL}>
+                  <span className="flex items-center gap-1">
+                    Total cost basis
+                    <Tooltip text="What you've put in overall — used to show growth vs. contributions." />
+                  </span>
+                  <input type="number" step="0.01" name="starting_contributed" defaultValue={account.starting_contributed ?? 0} className={`w-32 ${INPUT}`} />
+                </label>
+              </div>
             )}
           </div>
         )}

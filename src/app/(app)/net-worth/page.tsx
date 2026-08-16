@@ -16,8 +16,6 @@ import { IconCircle } from "@/components/IconCircle";
 import { Collapsible } from "@/components/Collapsible";
 import { MoveMoneyButton } from "@/components/MoveMoneyButton";
 import { AddAssetButton, AddLiabilityButton } from "@/components/AccountWizard";
-import { EmptyState } from "@/components/EmptyState";
-import { lucideKey } from "@/lib/icons";
 import { CARD, CARD_HEADER } from "@/lib/ui";
 
 // Rev 05 §4: Rocket-Money nested model — one "Assets" parent whose group
@@ -134,63 +132,65 @@ export default async function NetWorthPage() {
 
       <NetWorthHero total={netWorth.total} points={historyPoints} />
 
-      <div className="flex items-center justify-end gap-3">
-        <AddLiabilityButton />
-        <AddAssetButton incomeSources={incomeSources.map((s) => ({ id: s.id, name: s.name, freq: s.freq }))} />
-      </div>
-
-      {accounts.length === 0 ? (
-        <EmptyState icon={lucideKey("landmark")} title="No accounts yet" hint="Add your first one above." />
-      ) : (
-        <>
-          <div className={CARD}>
-            <div className="flex items-center justify-between">
-              <p className={CARD_HEADER}>Assets</p>
-              <Money value={assetsTotal} size="card" />
-            </div>
-            <div className="mt-2 divide-y divide-border">
-              {ASSET_SUBGROUPS.map((group) => {
-                const inGroup = accounts.filter((a) => accountGroup(a.type) === group);
-                if (inGroup.length === 0) return null;
-                const groupTotal = inGroup.reduce((s, a) => s + (valueById.get(a.id) ?? 0), 0);
-                const pct = assetsTotal > 0 ? Math.round((Math.abs(groupTotal) / assetsTotal) * 100) : 0;
-                return (
-                  <GroupRow
-                    key={group}
-                    label={group}
-                    total={groupTotal}
-                    pct={pct}
-                    pctLabel="assets"
-                    accountsInGroup={inGroup}
-                    valueById={valueById}
-                    blendedByAccount={blendedByAccount}
-                  />
-                );
-              })}
-            </div>
+      {/* Rev 06b v3 §1.1: each Add button sits directly above the section it adds to, same color as each other. */}
+      <div className={CARD}>
+        <div className="flex items-center justify-between gap-3">
+          <p className={CARD_HEADER}>Assets</p>
+          <div className="flex items-center gap-3">
+            <Money value={assetsTotal} size="card" />
+            <AddAssetButton incomeSources={incomeSources.map((s) => ({ id: s.id, name: s.name, freq: s.freq }))} />
           </div>
-
-          {liabilitiesAccounts.length > 0 && (
-            <div className={CARD}>
-              <div className="flex items-center justify-between">
-                <p className={CARD_HEADER}>Liabilities</p>
-                <Money value={-liabilitiesTotal} size="card" />
-              </div>
-              <div className="mt-2 divide-y divide-border">
+        </div>
+        {accounts.filter((a) => accountGroup(a.type) !== "Liabilities").length === 0 ? (
+          <p className="mt-3 text-[13px] text-ink-3">No accounts yet — add your first one above.</p>
+        ) : (
+          <div className="mt-2 divide-y divide-border">
+            {ASSET_SUBGROUPS.map((group) => {
+              const inGroup = accounts.filter((a) => accountGroup(a.type) === group);
+              if (inGroup.length === 0) return null;
+              const groupTotal = inGroup.reduce((s, a) => s + (valueById.get(a.id) ?? 0), 0);
+              const pct = assetsTotal > 0 ? Math.round((Math.abs(groupTotal) / assetsTotal) * 100) : 0;
+              return (
                 <GroupRow
-                  label="Debt"
-                  total={-liabilitiesTotal}
-                  pct={100}
-                  pctLabel="liabilities"
-                  accountsInGroup={liabilitiesAccounts}
+                  key={group}
+                  label={group}
+                  total={groupTotal}
+                  pct={pct}
+                  pctLabel="assets"
+                  accountsInGroup={inGroup}
                   valueById={valueById}
                   blendedByAccount={blendedByAccount}
                 />
-              </div>
-            </div>
-          )}
-        </>
-      )}
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className={CARD}>
+        <div className="flex items-center justify-between gap-3">
+          <p className={CARD_HEADER}>Liabilities</p>
+          <div className="flex items-center gap-3">
+            <Money value={-liabilitiesTotal} size="card" />
+            <AddLiabilityButton />
+          </div>
+        </div>
+        {liabilitiesAccounts.length === 0 ? (
+          <p className="mt-3 text-[13px] text-ink-3">No debt tracked yet — add one above.</p>
+        ) : (
+          <div className="mt-2 divide-y divide-border">
+            <GroupRow
+              label="Debt"
+              total={-liabilitiesTotal}
+              pct={100}
+              pctLabel="liabilities"
+              accountsInGroup={liabilitiesAccounts}
+              valueById={valueById}
+              blendedByAccount={blendedByAccount}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
