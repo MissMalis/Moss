@@ -3,11 +3,10 @@ import { notFound } from "next/navigation";
 import { getAccount, listHoldingsForAccount, listLiabilityLoans } from "@/lib/data/accounts";
 import { listSnapshotsForAccount } from "@/lib/data/net-worth-snapshots";
 import { listDeductions, listIncomeSources } from "@/lib/data/income";
-import { accountTypeLabel, blendedApr } from "@/lib/net-worth";
+import { accountTypeLabel, blendedApr, defaultAccountIcon } from "@/lib/net-worth";
 import { LIABILITY_TYPE_SET } from "@/lib/account-types";
 import { getAssetFieldConfig, assetShowsHoldingsList } from "@/lib/account-field-config";
 import { deleteAccount } from "@/lib/actions/accounts";
-import { createHolding, updateHolding, deleteHolding } from "@/lib/actions/holdings";
 import { getCardForAccount, listCardMultipliers } from "@/lib/data/cards";
 import { listCategories } from "@/lib/data/recurring";
 import { createCard, updateCard, deleteCard, createMultiplier, deleteMultiplier } from "@/lib/actions/cards";
@@ -17,7 +16,7 @@ import { NetWorthLines } from "@/components/NetWorthLines";
 import { AddButton } from "@/components/AddButton";
 import { IconPicker } from "@/components/IconPicker";
 import { IconCircle } from "@/components/IconCircle";
-import { HoldingFields } from "@/components/TickerPriceField";
+import { HoldingsSection } from "@/components/HoldingsSection";
 import { AccountDetailsSection } from "@/components/AccountDetailsSection";
 import { AccountContributionSection } from "@/components/AccountContributionSection";
 import { LiabilityDetailsSection } from "@/components/LiabilityDetailsSection";
@@ -25,15 +24,16 @@ import { LiabilityLoansSection } from "@/components/LiabilityLoansSection";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
 import { RowMenu } from "@/components/RowMenu";
 import { Tooltip } from "@/components/Tooltip";
-import { EmptyState } from "@/components/EmptyState";
-import { lucideKey } from "@/lib/icons";
+import { Dropdown } from "@/components/Dropdown";
 import { CONTRIBUTION_TYPES } from "@/lib/account-types";
 import { BTN_GHOST, CARD, CARD_HEADER, INPUT, LABEL, LINK_QUIET } from "@/lib/ui";
 
-// Holdings grid columns, shared between the header row and every data row
-// so figures actually line up (rev 04 §5 — this was misaligned before).
-const HOLDINGS_GRID = "grid grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr_auto] items-center gap-2";
-const ADD_POSITION_GRID = "grid grid-cols-[1fr_1fr_1fr_1fr_1fr] items-center gap-2";
+const NETWORK_OPTIONS = [
+  { value: "visa", label: "Visa" },
+  { value: "mastercard", label: "Mastercard" },
+  { value: "amex", label: "Amex" },
+  { value: "discover", label: "Discover" },
+];
 
 function mask(last4: string | null): string | null {
   return last4 ? `x${last4}` : null;
@@ -78,7 +78,7 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
 
       <section className={CARD}>
         <div className="flex items-center gap-3">
-          <IconCircle value={account.icon} label={account.name} variant="solid" />
+          <IconCircle value={account.icon ?? defaultAccountIcon(account.type)} label={account.name} variant="solid" />
           <div>
             <h1 className="font-display text-[22px] font-medium text-ink">{account.name}</h1>
             <p className="text-[13px] text-ink-3">
@@ -145,12 +145,7 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
                   </label>
                   <label className={LABEL}>
                     Network
-                    <select name="network" className={INPUT}>
-                      <option value="visa">Visa</option>
-                      <option value="mastercard">Mastercard</option>
-                      <option value="amex">Amex</option>
-                      <option value="discover">Discover</option>
-                    </select>
+                    <Dropdown name="network" options={NETWORK_OPTIONS} defaultValue="visa" />
                   </label>
                   <label className={LABEL}>
                     Base multiplier
@@ -191,12 +186,7 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
                             <input name="name" defaultValue={linkedCard.name} className={`min-w-0 flex-1 ${INPUT}`} />
                           </div>
                           <input name="last4" defaultValue={linkedCard.last4 ?? ""} maxLength={4} placeholder="Last 4" className={INPUT} />
-                          <select name="network" defaultValue={linkedCard.network ?? "visa"} className={INPUT}>
-                            <option value="visa">Visa</option>
-                            <option value="mastercard">Mastercard</option>
-                            <option value="amex">Amex</option>
-                            <option value="discover">Discover</option>
-                          </select>
+                          <Dropdown name="network" options={NETWORK_OPTIONS} defaultValue={linkedCard.network ?? "visa"} />
                           <div className="flex items-center gap-2">
                             <input
                               type="number"
@@ -246,13 +236,7 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
                 ) : (
                   <form action={createMultiplier} className="mt-2 flex items-end gap-2">
                     <input type="hidden" name="card_id" value={linkedCard.id} />
-                    <select name="category_id" required className={`py-1 text-[12.5px] ${INPUT}`}>
-                      {categories.map((cat) => (
-                        <option key={cat.id} value={cat.id}>
-                          {cat.name}
-                        </option>
-                      ))}
-                    </select>
+                    <Dropdown name="category_id" options={categories.map((cat) => ({ value: cat.id, label: cat.name }))} defaultValue={categories[0]?.id} />
                     <input type="number" step="0.5" name="multiplier" defaultValue={2} required className={`w-16 py-1 text-[12.5px] ${INPUT}`} />
                     <button type="submit" className={LINK_QUIET}>
                       Add bonus
@@ -265,82 +249,7 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
         </section>
       )}
 
-      {showsHoldings && (
-        <section className={CARD}>
-          <p className={CARD_HEADER}>Holdings</p>
-          {holdings.length === 0 ? (
-            <div className="mt-3">
-              <EmptyState icon={lucideKey("trending-up")} title="No positions yet" hint="Add one below." />
-            </div>
-          ) : (
-            <div className="mt-3 overflow-x-auto">
-              <div className={`${HOLDINGS_GRID} pb-1.5 text-center text-[11px] uppercase tracking-wide text-ink-3`}>
-                <span>Symbol</span>
-                <span>Shares</span>
-                <span>Cost basis</span>
-                <span>Date</span>
-                <span>Price</span>
-                <span>Value</span>
-                <span />
-              </div>
-              <div className="space-y-1.5">
-                {holdings.map((h) => {
-                  const formId = `holding-${h.id}`;
-                  return (
-                    <div key={h.id} className={`${HOLDINGS_GRID} rounded-lg border border-border bg-card-soft px-2 py-1.5 text-[12.5px]`}>
-                      {/* An empty, display:none <form> whose action every input below associates with via the form="" attribute — keeps the grid columns real siblings instead of nested inside a <form>, which is what caused the old misalignment, without the form itself eating a grid cell. */}
-                      <form id={formId} action={updateHolding} className="hidden">
-                        <input type="hidden" name="id" value={h.id} />
-                      </form>
-                      <HoldingFields
-                        formId={formId}
-                        symbolDefault={h.symbol}
-                        qtyDefault={h.qty}
-                        costBasisDefault={h.cost_basis}
-                        buyDateDefault={h.buy_date ?? ""}
-                        priceDefault={h.current_price}
-                      />
-                      <span className="text-ink tabular-nums">{formatMoney(h.qty * h.current_price)}</span>
-                      <span className="flex items-center gap-2 justify-self-end">
-                        <button form={formId} type="submit" className={LINK_QUIET}>
-                          Save
-                        </button>
-                        <form action={deleteHolding}>
-                          <input type="hidden" name="id" value={h.id} />
-                          <button type="submit" className={LINK_QUIET}>
-                            Remove
-                          </button>
-                        </form>
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          <div className="mt-4">
-            <AddButton label="Add position">
-              <form action={createHolding} className="flex flex-col gap-3">
-                <input type="hidden" name="account_id" value={account.id} />
-                <div className={`${ADD_POSITION_GRID} pb-1 text-center text-[11px] uppercase tracking-wide text-ink-3`}>
-                  <span>Symbol</span>
-                  <span>Shares</span>
-                  <span>Cost basis</span>
-                  <span>Date</span>
-                  <span>Price</span>
-                </div>
-                <div className={ADD_POSITION_GRID}>
-                  <HoldingFields />
-                </div>
-                <button type="submit" className={`${BTN_GHOST} self-start`}>
-                  Add position
-                </button>
-              </form>
-            </AddButton>
-          </div>
-        </section>
-      )}
+      {showsHoldings && <HoldingsSection accountId={account.id} holdings={holdings} />}
 
       <div className="flex justify-end">
         <ConfirmDeleteButton action={deleteAccount} hiddenFields={{ id: account.id }} itemLabel={account.name} label="Remove account" />

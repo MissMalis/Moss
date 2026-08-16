@@ -5,6 +5,7 @@ import { AddButton } from "@/components/AddButton";
 import { IconCircle } from "@/components/IconCircle";
 import { RowMenu } from "@/components/RowMenu";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
+import { Dropdown } from "@/components/Dropdown";
 import { Tooltip } from "@/components/Tooltip";
 import { BTN_SOLID, CARD, CARD_HEADER, INPUT, LABEL, SCROLL_LIST } from "@/lib/ui";
 
@@ -33,13 +34,7 @@ export function BudgetTracker({ budgets, categories }: { budgets: BudgetProgress
             <form action={createBudget} className="flex flex-wrap items-end gap-3">
               <label className={LABEL}>
                 Category
-                <select name="category" className={INPUT}>
-                  {available.map((c) => (
-                    <option key={c.id} value={c.name}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+                <Dropdown name="category" options={available.map((c) => ({ value: c.name, label: c.name }))} defaultValue={available[0]?.name} />
               </label>
               <label className={LABEL}>
                 Monthly cap

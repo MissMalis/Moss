@@ -6,6 +6,7 @@ import { formatMoney } from "@/lib/format";
 import { AddButton } from "@/components/AddButton";
 import { RowMenu } from "@/components/RowMenu";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
+import { Dropdown } from "@/components/Dropdown";
 import { Tooltip } from "@/components/Tooltip";
 import { BTN_SOLID, CARD, CARD_HEADER, INPUT, LABEL, ROW } from "@/lib/ui";
 
@@ -61,13 +62,7 @@ export function AccountContributionSection({
               <input type="hidden" name="name" value="Contribution" />
               <label className={LABEL}>
                 From
-                <select name="income_source_id" className={INPUT}>
-                  {incomeSources.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
+                <Dropdown name="income_source_id" options={incomeSources.map((s) => ({ value: s.id, label: s.name }))} defaultValue={incomeSources[0]?.id} />
               </label>
               <label className={LABEL}>
                 {taxTreatment === "post_tax" ? "Contribution (post-tax)" : "Contribution (pre-tax)"} per check
@@ -121,13 +116,11 @@ export function AccountContributionSection({
                             <input type="hidden" name="target_account_key" value={accountSystemKey} />
                             <input type="hidden" name="tax_treatment" value={taxTreatment} />
                             <input type="hidden" name="name" value="Contribution" />
-                            <select name="income_source_id" defaultValue={d.income_source_id ?? ""} className={INPUT}>
-                              {incomeSources.map((s) => (
-                                <option key={s.id} value={s.id}>
-                                  {s.name}
-                                </option>
-                              ))}
-                            </select>
+                            <Dropdown
+                              name="income_source_id"
+                              options={incomeSources.map((s) => ({ value: s.id, label: s.name }))}
+                              defaultValue={d.income_source_id ?? ""}
+                            />
                             <input type="number" step="0.01" name="amount" defaultValue={d.amount} className={INPUT} />
                             {isMatch401k && (
                               <label className={LABEL}>

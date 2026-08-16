@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { INPUT } from "@/lib/ui";
 
 /**
@@ -59,6 +59,16 @@ export function HoldingFields({
       setChecking(false);
     }
   }
+
+  // Rev 07 #7: an existing holding (row already has a symbol on load) never
+  // triggered a check before — only editing the field did — so a real
+  // ticker like SPY sat at whatever price was last saved, editable, never
+  // validated. Check once on mount too.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- checkTicker's setState calls all happen after its internal `await fetch(...)`, not synchronously
+    if (symbolDefault) checkTicker(symbolDefault);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <>

@@ -5,6 +5,9 @@ const SIZES = {
   section: { dollars: "text-[40px] leading-[1.05]", cents: "text-[26px]" },
   card: { dollars: "text-[21px] leading-[1.2]", cents: "text-[13px]" },
   stat: { dollars: "text-[21px] leading-[1.2]", cents: "text-[13px]" },
+  // Rev 07 #2: the Assets/Liabilities group-row subtotal — bold and dark
+  // like its parent total, one tier smaller.
+  subtotal: { dollars: "text-[17px] leading-[1.2]", cents: "text-[11px]" },
 } as const;
 
 export function Money({

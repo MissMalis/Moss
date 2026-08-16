@@ -8,6 +8,9 @@ export interface TransactionLike {
   date: string; // ISO
   kind: "income" | "outflow" | "transfer";
   category: string | null;
+  /** Rev 07 #1: the category's own icon/color, resolved by the caller (which has the categories list) — RecentList must never fall back to a bare letter. */
+  categoryIcon?: string | null;
+  categoryColor?: string | null;
 }
 
 export interface DateGroup {

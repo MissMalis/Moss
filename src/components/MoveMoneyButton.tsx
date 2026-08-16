@@ -2,7 +2,14 @@
 
 import { useState } from "react";
 import { createTransfer } from "@/lib/actions/transfers";
-import { BTN_GHOST, BTN_SOLID, INPUT, LABEL } from "@/lib/ui";
+import { Dropdown } from "@/components/Dropdown";
+import { BTN_SOLID, INPUT, LABEL } from "@/lib/ui";
+
+// Rev 07 #6: was grey-on-grey (BTN_GHOST) and easy to miss — an outlined
+// dark button gives it real visible weight without competing with the
+// solid-filled Add asset/Add liability buttons beside it.
+const BTN_OUTLINED_DARK =
+  "rounded-lg border border-ink px-3.5 py-1.5 text-[14px] font-medium text-ink transition hover:bg-ink hover:text-bg";
 
 export interface TransferAccountOption {
   id: string;
@@ -17,7 +24,7 @@ export function MoveMoneyButton({ accounts }: { accounts: TransferAccountOption[
 
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} className={BTN_GHOST}>
+      <button type="button" onClick={() => setOpen(true)} className={BTN_OUTLINED_DARK}>
         Move money
       </button>
 
@@ -43,23 +50,11 @@ export function MoveMoneyButton({ accounts }: { accounts: TransferAccountOption[
             >
               <label className={LABEL}>
                 From
-                <select name="from_account_id" required className={INPUT}>
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
-                </select>
+                <Dropdown name="from_account_id" options={accounts.map((a) => ({ value: a.id, label: a.name }))} defaultValue={accounts[0]?.id} />
               </label>
               <label className={LABEL}>
                 To
-                <select name="to_account_id" required defaultValue={accounts[1]?.id} className={INPUT}>
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
-                </select>
+                <Dropdown name="to_account_id" options={accounts.map((a) => ({ value: a.id, label: a.name }))} defaultValue={accounts[1]?.id} />
               </label>
               <label className={LABEL}>
                 Amount

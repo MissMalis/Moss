@@ -7,6 +7,7 @@
 // falling back to its own `balance` for legacy rows that never got one.
 
 import { LIABILITY_TYPE_SET, HOLDINGS_TOGGLE_TYPES } from "@/lib/account-types";
+import { lucideKey } from "@/lib/icons";
 
 export interface AccountForNetWorth {
   id: string;
@@ -116,6 +117,35 @@ export function accountGroup(type: string): "Investments" | "Cash" | "Liabilitie
   if (LIABILITY_TYPE_SET.has(type)) return "Liabilities";
   if (HOLDINGS_TYPES.has(type) || type === "HSA") return "Investments";
   return "Cash";
+}
+
+// Rev 07 #2: "account marks = the type symbol circle, not letters" — a
+// custom icon (set via the picker) still wins; this is only the fallback
+// for the common case where nobody ever picked one.
+const ACCOUNT_TYPE_ICONS: Record<string, string> = {
+  Checking: "landmark",
+  Savings: "landmark",
+  Cash: "landmark",
+  HYSA: "landmark",
+  "Stored-value": "credit-card",
+  HSA: "heart-plus",
+  "401(k)": "briefcase",
+  "Traditional IRA": "trending-up",
+  "Roth IRA": "trending-up",
+  "Taxable Brokerage": "trending-up",
+  Other: "wallet",
+  "Credit card": "credit-card",
+  "Student loans": "graduation-cap",
+  "Auto loan": "car",
+  Mortgage: "home",
+  "Personal loan": "coins",
+  "Medical debt": "stethoscope",
+  "Other Debt": "receipt",
+  Liabilities: "credit-card",
+};
+
+export function defaultAccountIcon(type: string): string {
+  return lucideKey(ACCOUNT_TYPE_ICONS[type] ?? "wallet");
 }
 
 export interface SnapshotPoint {

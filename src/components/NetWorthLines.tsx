@@ -106,7 +106,8 @@ export function NetWorthLines({ points, variant = "full" }: Props) {
         width="100%"
         height={HEIGHT}
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-        className="overflow-visible"
+        preserveAspectRatio="none"
+        className="block overflow-visible"
         onMouseMove={handleMove}
         onMouseLeave={() => setHoverIdx(null)}
       >

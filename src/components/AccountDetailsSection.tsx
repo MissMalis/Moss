@@ -8,6 +8,7 @@ import { formatMoney, formatShortDateLabel } from "@/lib/format";
 import { IconPicker } from "@/components/IconPicker";
 import { ActionForm } from "@/components/ActionForm";
 import { Employer401kMatchFields } from "@/components/Employer401kMatchFields";
+import { Dropdown } from "@/components/Dropdown";
 import { Tooltip } from "@/components/Tooltip";
 import { BTN_GHOST, BTN_SOLID, CARD, CARD_HEADER, INPUT, LABEL } from "@/lib/ui";
 
@@ -163,13 +164,11 @@ export function AccountDetailsSection({ account }: { account: AccountRow }) {
               <>
                 <label className={LABEL}>
                   Card type
-                  <select name="debit_card_network" defaultValue={account.debit_card_network ?? "Visa"} className={INPUT}>
-                    {["Visa", "Mastercard", "Amex", "Discover"].map((n) => (
-                      <option key={n} value={n}>
-                        {n}
-                      </option>
-                    ))}
-                  </select>
+                  <Dropdown
+                    name="debit_card_network"
+                    options={["Visa", "Mastercard", "Amex", "Discover"].map((n) => ({ value: n, label: n }))}
+                    defaultValue={account.debit_card_network ?? "Visa"}
+                  />
                 </label>
                 <label className={LABEL}>
                   Last 4 of card

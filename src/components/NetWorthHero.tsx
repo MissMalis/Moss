@@ -17,7 +17,24 @@ export function NetWorthHero({ total, points }: { total: number; points: History
 
   return (
     <section className={`${CARD} flex h-full flex-col`}>
-      <p className={CARD_HEADER}>Net worth</p>
+      <div className="flex items-start justify-between gap-3">
+        <p className={CARD_HEADER}>Net worth</p>
+        <div className="flex items-center gap-1">
+          {RANGES.map((r) => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => setRange(r)}
+              className={`rounded-md px-2.5 py-1 text-[12.5px] font-medium transition ${
+                range === r ? "bg-moss-bg text-moss" : "text-ink-3 hover:text-ink-2"
+              }`}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <Money value={total} size="section" />
 
       {deltas && (
@@ -31,21 +48,6 @@ export function NetWorthHero({ total, points }: { total: number; points: History
           </span>
         </p>
       )}
-
-      <div className="mt-4 flex items-center gap-1">
-        {RANGES.map((r) => (
-          <button
-            key={r}
-            type="button"
-            onClick={() => setRange(r)}
-            className={`rounded-md px-2.5 py-1 text-[12.5px] font-medium transition ${
-              range === r ? "bg-moss-bg text-moss" : "text-ink-3 hover:text-ink-2"
-            }`}
-          >
-            {r}
-          </button>
-        ))}
-      </div>
 
       <div className="mt-3 flex items-center gap-4 text-[12px] text-ink-3">
         <span className="flex items-center gap-1.5">

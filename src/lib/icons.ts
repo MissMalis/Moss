@@ -12,9 +12,10 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-// Rev 05 §1.2/§9: the curated icon set — no emoji anywhere in the product
-// UI. Stored as "lucide:<key>" in an icon/emoji text column (categories,
-// accounts, cards, recurring_items all share the same convention).
+// Rev 05 §1.2/§9: the curated icon set, stored as "lucide:<key>" in an
+// icon/emoji text column (categories, accounts, cards, recurring_items all
+// share the same convention). Rev 07 #10 added a real Emoji tab alongside
+// it — see EMOJI_REGISTRY below, stored under its own "emoji:" prefix.
 export const ICON_REGISTRY: Record<string, LucideIcon> = {
   home: Home, "utensils-crossed": UtensilsCrossed, basket: ShoppingBasket, tv: Tv,
   "shopping-bag": ShoppingBag, train: TrainFront, bolt: Zap, "game-pad": Gamepad2, "heart-plus": HeartPlus,
@@ -33,6 +34,7 @@ export const ICON_REGISTRY: Record<string, LucideIcon> = {
 };
 
 const LUCIDE_PREFIX = "lucide:";
+const EMOJI_PREFIX = "emoji:";
 
 export function lucideKey(key: string): string {
   return `${LUCIDE_PREFIX}${key}`;
@@ -50,6 +52,38 @@ export function resolveLucideIcon(value: string | null | undefined): LucideIcon 
   if (!isLucideValue(value)) return null;
   const key = value!.slice(LUCIDE_PREFIX.length);
   return ICON_REGISTRY[key] ?? null;
+}
+
+// Rev 07 #10: a curated emoji set for the icon picker's Emoji tab, keyed
+// the same way as ICON_REGISTRY so search works identically.
+export const EMOJI_REGISTRY: Record<string, string> = {
+  house: "🏠", food: "🍔", groceries: "🛒", tv: "📺", shopping: "🛍️", train: "🚆",
+  bolt: "⚡", game: "🎮", "heart-plus": "❤️‍🩹", coffee: "☕", pizza: "🍕", car: "🚗",
+  fuel: "⛽", plane: "✈️", bike: "🚲", parking: "🅿️", pill: "💊", doctor: "🩺",
+  gym: "🏋️", pet: "🐾", grad: "🎓", music: "🎵", movie: "🎬", book: "📖",
+  gift: "🎁", art: "🎨", trophy: "🏆", party: "🎉", travel: "🧳", shirt: "👕",
+  walk: "👣", sparkle: "✨", box: "📦", card: "💳", bank: "🏦", wallet: "👛",
+  up: "📈", down: "📉", receipt: "🧾", coin: "🪙", gem: "💎", briefcase: "💼",
+  laptop: "💻", desktop: "🖥️", calendar: "📅", mail: "✉️", lock: "🔒", baby: "👶",
+  people: "👥", leaf: "🍃", sun: "☀️", heart: "❤️", star: "⭐", bell: "🔔",
+  target: "🎯", wifi: "📶", phone: "📞", tool: "🔧", water: "💧", fire: "🔥",
+  sofa: "🛋️", laundry: "🧺", trash: "🗑️", building: "🏢", cake: "🎂", dog: "🐶",
+  cat: "🐱", beer: "🍺", wine: "🍷", headphones: "🎧", soccer: "⚽", basketball: "🏀",
+  fish: "🎣", broom: "🧹", shower: "🚿", bed: "🛏️", smile: "😀", cool: "😎",
+  celebrate: "🥳", sleep: "😴", money: "🤑",
+};
+
+export function emojiKey(char: string): string {
+  return `${EMOJI_PREFIX}${char}`;
+}
+
+export function isEmojiValue(value: string | null | undefined): boolean {
+  return !!value?.startsWith(EMOJI_PREFIX);
+}
+
+export function resolveEmoji(value: string | null | undefined): string | null {
+  if (!isEmojiValue(value)) return null;
+  return value!.slice(EMOJI_PREFIX.length) || null;
 }
 
 // Rev 05 §9: preloaded default categories, exact icon + color per spec.

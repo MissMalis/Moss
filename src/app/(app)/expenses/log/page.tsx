@@ -11,9 +11,9 @@ import { SpendingRing } from "@/components/SpendingRing";
 import { EmptyState } from "@/components/EmptyState";
 import { CARD, CARD_HEADER, SCROLL_LIST } from "@/lib/ui";
 import { groupByDate, type TransactionLike } from "@/lib/recent-transactions";
+import { buildPayableAccounts } from "@/lib/payable-accounts";
 import { lucideKey } from "@/lib/icons";
 
-const INVESTING_TYPES = new Set(["HSA", "401(k)", "Roth IRA", "Traditional IRA", "Taxable Brokerage"]);
 const DEFAULT_CATEGORY_ICON = lucideKey("credit-card");
 
 function currentMonthWindow() {
@@ -35,11 +35,11 @@ export default async function LogExpensePage() {
     getSettings(),
   ]);
 
-  const investingAccounts = accounts.filter((a) => INVESTING_TYPES.has(a.type));
-  const storedValueAccounts = accounts.filter((a) => a.type === "Stored-value");
+  const payableAccounts = buildPayableAccounts(accounts, cards);
 
   const occurrenceState = new Map(occurrenceRows.map((o) => [`${o.recurring_item_id}|${o.occ_date}`, o]));
   const categoriesById = new Map(categories.map((c) => [c.id, c]));
+  const categoriesByName = new Map(categories.map((c) => [c.name, c]));
   const occurrences = buildOccurrencesForWindow(items, occurrenceState, start, end);
 
   const byCategory = new Map<string, number>();
@@ -54,7 +54,7 @@ export default async function LogExpensePage() {
   }
   const spendingByCategory = Array.from(byCategory.entries())
     .filter(([, amount]) => amount > 0)
-    .map(([name, amount]) => ({ name, amount, icon: categoriesById.get(name)?.emoji ?? DEFAULT_CATEGORY_ICON }))
+    .map(([name, amount]) => ({ name, amount, icon: categoriesByName.get(name)?.emoji ?? DEFAULT_CATEGORY_ICON }))
     .sort((a, b) => b.amount - a.amount);
 
   const transactions: TransactionLike[] = purchases.map((p) => ({
@@ -64,6 +64,8 @@ export default async function LogExpensePage() {
     date: p.spent_on,
     kind: "outflow",
     category: p.category || null,
+    categoryIcon: p.category ? (categoriesByName.get(p.category)?.emoji ?? null) : null,
+    categoryColor: p.category ? (categoriesByName.get(p.category)?.color ?? null) : null,
   }));
   const groups = groupByDate(transactions);
 
@@ -73,9 +75,7 @@ export default async function LogExpensePage() {
         <p className={CARD_HEADER}>Log an expense</p>
         <div className="mt-3">
           <LogExpenseForm
-            investingAccounts={investingAccounts}
-            storedValueAccounts={storedValueAccounts}
-            cards={cards.map((c) => ({ id: c.id, name: c.name }))}
+            payableAccounts={payableAccounts}
             categories={categories.map((c) => ({ id: c.id, name: c.name }))}
             taxRatePct={settings.tax_rate_pct}
             location={settings.location}

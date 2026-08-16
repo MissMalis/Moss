@@ -6,6 +6,16 @@ import type { ReviewItem } from "@/lib/checklist";
 import { CARD, CARD_HEADER, SCROLL_LIST } from "@/lib/ui";
 
 /**
+ * Rev 07 #5: some checklist messages still carry their own "Action — "
+ * prefix (the underlying data/tests pin that string), so strip it here at
+ * the render layer only — line 2 must never repeat line 1's text.
+ */
+function detailLine(item: ReviewItem): string {
+  const prefix = `${item.actionLabel} — `;
+  return item.message.startsWith(prefix) ? item.message.slice(prefix.length) : item.message;
+}
+
+/**
  * Rev 05 §3: renamed from "Needs review". Each row: a checkbox (mark done —
  * dismisses it), the per-type icon, two lines of text (line 1 = the task,
  * line 2 = the detail — no em-dash joining them into one line), and a
@@ -36,7 +46,7 @@ export function AlertsCard({ items }: { items: ReviewItem[] }) {
               <Link href={item.href} className="flex flex-1 items-center justify-between gap-2 group min-w-0">
                 <div className="min-w-0">
                   <p className="text-[13px] font-medium text-ink transition group-hover:text-moss">{item.actionLabel}</p>
-                  <p className="truncate text-[12px] text-ink-2">{item.message}</p>
+                  <p className="truncate text-[12px] text-ink-2">{detailLine(item)}</p>
                 </div>
                 <ChevronRight size={16} className="shrink-0 text-ink-3" />
               </Link>

@@ -10,6 +10,7 @@ import { IconPicker } from "@/components/IconPicker";
 import { HoldingFields } from "@/components/TickerPriceField";
 import { ContributionAmountFields } from "@/components/ContributionAmountFields";
 import { Employer401kMatchFields } from "@/components/Employer401kMatchFields";
+import { Dropdown } from "@/components/Dropdown";
 import { Tooltip } from "@/components/Tooltip";
 import type { PayFreq } from "@/lib/employer-match";
 import { BTN_GHOST, BTN_SOLID, INPUT, LABEL } from "@/lib/ui";
@@ -222,13 +223,7 @@ function AssetDetailsForm({
             <>
               <label className={LABEL}>
                 Card type
-                <select name="debit_card_network" defaultValue="Visa" className={INPUT}>
-                  {CARD_NETWORKS.map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
+                <Dropdown name="debit_card_network" options={CARD_NETWORKS.map((n) => ({ value: n, label: n }))} defaultValue="Visa" />
               </label>
               <label className={LABEL}>
                 Last 4 of card
@@ -344,13 +339,12 @@ function AssetDetailsForm({
             <div className="mt-2 flex flex-wrap items-end gap-3">
               <label className={LABEL}>
                 From
-                <select name="income_source_id" value={incomeSourceId} onChange={(e) => setIncomeSourceId(e.target.value)} className={INPUT}>
-                  {incomeSources.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
+                <Dropdown
+                  name="income_source_id"
+                  options={incomeSources.map((s) => ({ value: s.id, label: s.name }))}
+                  value={incomeSourceId}
+                  onChange={setIncomeSourceId}
+                />
               </label>
               <span className="pb-2 text-[12.5px] text-ink-3">{cfg.contributionTaxTreatment === "post_tax" ? "post-tax" : "pre-tax"}</span>
               {cfg.showsSalaryAndMatch ? (
@@ -455,13 +449,7 @@ function LiabilityDetailsForm({
         <div className="flex flex-wrap items-end gap-3">
           <label className={LABEL}>
             Card type
-            <select name="card_network" defaultValue="Visa" className={INPUT}>
-              {CARD_NETWORKS.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
+            <Dropdown name="card_network" options={CARD_NETWORKS.map((n) => ({ value: n, label: n }))} defaultValue="Visa" />
           </label>
           <label className={LABEL}>
             Last 4

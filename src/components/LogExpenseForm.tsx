@@ -2,42 +2,30 @@
 
 import { useState } from "react";
 import { createPurchase } from "@/lib/actions/income";
+import { Dropdown } from "@/components/Dropdown";
 import { Tooltip } from "@/components/Tooltip";
+import type { PayableAccountOption } from "@/lib/payable-accounts";
 import { BTN_SOLID, INPUT, LABEL } from "@/lib/ui";
-
-type PaymentSource = "checking" | "investing" | "stored_value" | "rewards_card";
-
-interface AccountOption {
-  id: string;
-  name: string;
-}
-
-interface CardOption {
-  id: string;
-  name: string;
-}
 
 interface CategoryOption {
   id: string;
   name: string;
 }
 
+/** Rev 07 #4: "Paid with" lists the user's actual payable accounts (name · masked last4), not generic payment-source type names. */
 export function LogExpenseForm({
-  investingAccounts,
-  storedValueAccounts,
-  cards = [],
+  payableAccounts,
   categories = [],
   taxRatePct = null,
   location = null,
 }: {
-  investingAccounts: AccountOption[];
-  storedValueAccounts: AccountOption[];
-  cards?: CardOption[];
+  payableAccounts: PayableAccountOption[];
   categories?: CategoryOption[];
   taxRatePct?: number | null;
   location?: string | null;
 }) {
-  const [source, setSource] = useState<PaymentSource>("checking");
+  const [selectedId, setSelectedId] = useState(payableAccounts[0]?.id ?? "");
+  const selected = payableAccounts.find((p) => p.id === selectedId) ?? null;
 
   return (
     <form action={createPurchase} className="flex flex-wrap items-end gap-3">
@@ -61,67 +49,20 @@ export function LogExpenseForm({
       </label>
       <label className={LABEL}>
         Category
-        <select name="category" defaultValue={categories[0]?.name ?? ""} className={`w-32 ${INPUT}`}>
-          {categories.map((c) => (
-            <option key={c.id} value={c.name}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+        <Dropdown name="category" options={categories.map((c) => ({ value: c.name, label: c.name }))} defaultValue={categories[0]?.name ?? ""} />
       </label>
       <label className={LABEL}>
         Paid with
-        <select
-          name="payment_source"
-          value={source}
-          onChange={(e) => setSource(e.target.value as PaymentSource)}
-          className={INPUT}
-        >
-          <option value="checking">Checking</option>
-          {investingAccounts.length > 0 && <option value="investing">Investing cash sleeve</option>}
-          {storedValueAccounts.length > 0 && <option value="stored_value">Prepaid / reloadable</option>}
-          {cards.length > 0 && <option value="rewards_card">Rewards card</option>}
-        </select>
+        <Dropdown
+          options={payableAccounts.map((p) => ({ value: p.id, label: p.label }))}
+          value={selectedId}
+          onChange={setSelectedId}
+          placeholder="No payable accounts yet"
+        />
       </label>
-
-      {source === "investing" && (
-        <label className={LABEL}>
-          Account
-          <select name="source_account_id" className={INPUT}>
-            {investingAccounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-
-      {source === "stored_value" && (
-        <label className={LABEL}>
-          Card
-          <select name="source_account_id" className={INPUT}>
-            {storedValueAccounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-
-      {source === "rewards_card" && (
-        <label className={LABEL}>
-          Card
-          <select name="card_id" className={INPUT}>
-            {cards.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
+      <input type="hidden" name="payment_source" value={selected?.paymentSource ?? "checking"} />
+      <input type="hidden" name="source_account_id" value={selected?.sourceAccountId ?? ""} />
+      <input type="hidden" name="card_id" value={selected?.cardId ?? ""} />
 
       <label className="flex items-center gap-1.5 pb-2 text-[12.5px] text-ink-2">
         <input type="checkbox" name="apply_tax" />
@@ -139,12 +80,12 @@ export function LogExpenseForm({
         Log the expense
       </button>
 
-      {source === "rewards_card" ? (
+      {selected?.paymentSource === "rewards_card" ? (
         <p className="w-full text-[12.5px] text-ink-3">
           Quarantined from Safe to spend — shows up in Sweep to pay off later.
         </p>
       ) : (
-        source !== "checking" && (
+        selected && selected.paymentSource !== "checking" && (
           <p className="w-full text-[12.5px] text-ink-3">
             Comes out of that account&apos;s own balance — Safe to spend won&apos;t move.
           </p>

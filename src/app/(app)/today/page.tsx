@@ -102,9 +102,9 @@ export default async function TodayPage() {
 
       <section className={CARD}>
         <p className={CARD_HEADER}>Safe to spend</p>
-        <Money value={safeToSpend} size="hero" className="text-moss" />
+        <Money value={safeToSpend} size="section" className="text-moss" />
 
-        <div className="ml-[38px] mt-3 inline-flex items-center gap-1.5 rounded-full bg-moss-bg px-3 py-1.5 text-[13px] font-medium text-moss">
+        <div className="ml-[29px] mt-3 inline-flex items-center gap-1.5 rounded-full bg-moss-bg px-3 py-1.5 text-[13px] font-medium text-moss">
           {formatMoney(perDay)}/day · {daysLeft} day{daysLeft === 1 ? "" : "s"} left
         </div>
 

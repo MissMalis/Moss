@@ -61,11 +61,13 @@ export async function getTodayExtras(todayISO: string) {
   );
 
   const categoryById = new Map(categories.map((c) => [c.id, c]));
+  const categoryByName = new Map(categories.map((c) => [c.name, c]));
   const occByKey = new Map(occurrences.map((o) => [`${o.recurring_item_id}|${o.occ_date}`, o]));
 
   // ---- Recent: logged purchases + posted bills + posted paychecks, newest first ----
   const transactions: TransactionLike[] = [];
   for (const p of purchases) {
+    const cat = p.category ? categoryByName.get(p.category) : null;
     transactions.push({
       id: p.id,
       name: p.name,
@@ -73,6 +75,8 @@ export async function getTodayExtras(todayISO: string) {
       date: p.spent_on,
       kind: "outflow",
       category: p.category || null,
+      categoryIcon: cat?.emoji ?? null,
+      categoryColor: cat?.color ?? null,
     });
   }
   const itemById = new Map(recurringItems.map((item) => [item.id, item]));
@@ -81,13 +85,16 @@ export async function getTodayExtras(todayISO: string) {
     const item = itemById.get(occ.recurring_item_id);
     if (!item) continue;
     const amount = occ.actual_amount ?? occ.override_amount ?? item.amount;
+    const cat = item.category_id ? categoryById.get(item.category_id) : null;
     transactions.push({
       id: `${item.id}|${occ.occ_date}`,
       name: item.name,
       amount,
       date: occ.occ_date,
       kind: "outflow",
-      category: item.category_id ? (categoryById.get(item.category_id)?.name ?? null) : null,
+      category: cat?.name ?? null,
+      categoryIcon: cat?.emoji ?? null,
+      categoryColor: cat?.color ?? null,
     });
   }
   for (const pp of recentPayPeriods) {

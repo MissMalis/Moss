@@ -1,5 +1,5 @@
 import { createElement } from "react";
-import { resolveLucideIcon, isDataUrlValue } from "@/lib/icons";
+import { resolveLucideIcon, isDataUrlValue, resolveEmoji } from "@/lib/icons";
 import { candyColorForCategory } from "@/lib/candy-colors";
 
 const SIZES = { sm: 26, md: 34, lg: 44 } as const;
@@ -26,6 +26,7 @@ export function IconCircle({
   const px = SIZES[size];
   const resolvedColor = color || candyColorForCategory(label);
   const iconComponent = resolveLucideIcon(value);
+  const emoji = resolveEmoji(value);
 
   if (isDataUrlValue(value)) {
     // eslint-disable-next-line @next/next/no-img-element -- small inline data URI, not worth next/image's pipeline
@@ -41,7 +42,9 @@ export function IconCircle({
       style={{ width: px, height: px, background }}
       aria-hidden
     >
-      {iconComponent ? (
+      {emoji ? (
+        <span style={{ fontSize: Math.round(px * 0.55), lineHeight: 1 }}>{emoji}</span>
+      ) : iconComponent ? (
         createElement(iconComponent, { size: Math.round(px * 0.55), color: foreground, strokeWidth: 2 })
       ) : (
         <span className="text-[13px] font-medium" style={{ color: foreground }}>

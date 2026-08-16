@@ -24,12 +24,13 @@ import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
 import { RecentList } from "@/components/RecentList";
 import { SpendingRing } from "@/components/SpendingRing";
 import { LogExpenseForm } from "@/components/LogExpenseForm";
+import { Dropdown } from "@/components/Dropdown";
 import { Tooltip } from "@/components/Tooltip";
+import { buildPayableAccounts } from "@/lib/payable-accounts";
 import { lucideKey } from "@/lib/icons";
 import { BTN_SOLID, CARD, CARD_HEADER, INPUT, LABEL, LINK_QUIET, SCROLL_LIST } from "@/lib/ui";
 
 const DEFAULT_CATEGORY_ICON = lucideKey("credit-card");
-const INVESTING_TYPES = new Set(["HSA", "401(k)", "Roth IRA", "Traditional IRA", "Taxable Brokerage"]);
 
 function currentMonthWindow() {
   const now = new Date();
@@ -51,8 +52,7 @@ export default async function RecurringBillsPage() {
     listCards(),
     getSettings(),
   ]);
-  const investingAccounts = accounts.filter((a) => INVESTING_TYPES.has(a.type));
-  const storedValueAccounts = accounts.filter((a) => a.type === "Stored-value");
+  const payableAccounts = buildPayableAccounts(accounts, cards);
 
   const primarySource = incomeSources.find((s) => s.freq !== "one-off") ?? null;
   const windows = primarySource ? windowsAround(primarySource, todayISO) : [];
@@ -83,6 +83,7 @@ export default async function RecurringBillsPage() {
   const budgetProgress = computeBudgetProgress(budgetRows, monthPurchases);
 
   // §8: "This month's expenses" + "Where it went" — same shared component/data as Dashboard and Sweep.
+  const categoryByName = new Map(categories.map((c) => [c.name, c]));
   const transactions: TransactionLike[] = monthPurchases.map((p) => ({
     id: p.id,
     name: p.name,
@@ -90,6 +91,8 @@ export default async function RecurringBillsPage() {
     date: p.spent_on,
     kind: "outflow",
     category: p.category || null,
+    categoryIcon: p.category ? (categoryByName.get(p.category)?.emoji ?? null) : null,
+    categoryColor: p.category ? (categoryByName.get(p.category)?.color ?? null) : null,
   }));
   const monthGroups = groupByDate(transactions);
 
@@ -100,10 +103,13 @@ export default async function RecurringBillsPage() {
     byCategory.set(name, (byCategory.get(name) ?? 0) + o.amount);
   }
   for (const p of monthPurchases) {
+    // Rev 07 #8: match computeBudgetProgress's scope (checking-sourced
+    // purchases only) so the same category never shows two different
+    // "spent" totals between the ring and the budget tracker.
+    if (p.payment_source !== "checking") continue;
     const name = p.category || "Other";
     byCategory.set(name, (byCategory.get(name) ?? 0) + p.amount);
   }
-  const categoryByName = new Map(categories.map((c) => [c.name, c]));
   const spendingByCategory = Array.from(byCategory.entries())
     .filter(([, amount]) => amount > 0)
     .map(([name, amount]) => ({ name, amount, icon: categoryByName.get(name)?.emoji ?? DEFAULT_CATEGORY_ICON }))
@@ -121,9 +127,7 @@ export default async function RecurringBillsPage() {
         <div className="flex items-center gap-2">
           <AddButton label="+ Log an expense">
             <LogExpenseForm
-              investingAccounts={investingAccounts}
-              storedValueAccounts={storedValueAccounts}
-              cards={cards.map((c) => ({ id: c.id, name: c.name }))}
+              payableAccounts={payableAccounts}
               categories={categories.map((c) => ({ id: c.id, name: c.name }))}
               taxRatePct={settings.tax_rate_pct}
               location={settings.location}
@@ -137,14 +141,11 @@ export default async function RecurringBillsPage() {
               </label>
               <label className={LABEL}>
                 Category
-                <select name="category_id" className={INPUT}>
-                  <option value="">No category</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+                <Dropdown
+                  name="category_id"
+                  options={[{ value: "", label: "No category" }, ...categories.map((c) => ({ value: c.id, label: c.name }))]}
+                  defaultValue=""
+                />
               </label>
               <label className={LABEL}>
                 Amount / estimate
@@ -217,14 +218,11 @@ export default async function RecurringBillsPage() {
                             <form action={updateRecurringItem} className="flex flex-col gap-2">
                               <input type="hidden" name="id" value={item.id} />
                               <input name="name" defaultValue={item.name} className={INPUT} />
-                              <select name="category_id" defaultValue={item.category_id ?? ""} className={INPUT}>
-                                <option value="">No category</option>
-                                {categories.map((c) => (
-                                  <option key={c.id} value={c.id}>
-                                    {c.name}
-                                  </option>
-                                ))}
-                              </select>
+                              <Dropdown
+                                name="category_id"
+                                options={[{ value: "", label: "No category" }, ...categories.map((c) => ({ value: c.id, label: c.name }))]}
+                                defaultValue={item.category_id ?? ""}
+                              />
                               <div className="flex items-center gap-2">
                                 <input type="number" step="0.01" name="amount" defaultValue={item.amount} className={`flex-1 ${INPUT}`} />
                                 <input type="number" min={1} max={31} name="day_of_month" defaultValue={item.day_of_month} className={`w-16 ${INPUT}`} />

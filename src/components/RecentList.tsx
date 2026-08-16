@@ -1,5 +1,4 @@
 import { formatMoney, formatShortDateLabel } from "@/lib/format";
-import { candyColorForCategory } from "@/lib/candy-colors";
 import { StandardRow } from "@/components/StandardRow";
 import { IconCircle } from "@/components/IconCircle";
 import type { DateGroup } from "@/lib/recent-transactions";
@@ -39,7 +38,7 @@ export function RecentList({
                 name={t.name}
                 categorySymbol={
                   t.kind === "outflow" ? (
-                    <IconCircle value={null} label={t.category ?? t.name} color={candyColorForCategory(t.category ?? t.name)} variant="tinted" size="sm" />
+                    <IconCircle value={t.categoryIcon ?? null} label={t.category ?? t.name} color={t.categoryColor} variant="tinted" size="sm" />
                   ) : null
                 }
                 amountNode={

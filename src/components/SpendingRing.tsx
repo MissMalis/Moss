@@ -132,19 +132,19 @@ export function SpendingRing({ data }: { data: RingCategory[] }) {
         </text>
       </svg>
 
-      <div className="grid w-full grid-cols-2 gap-x-6 gap-y-2.5 sm:max-w-xs">
+      <div className="grid w-full grid-cols-2 gap-x-5 gap-y-2.5 sm:max-w-sm">
         {data.map((d) => (
-          <div key={d.name} className="flex items-center justify-between gap-2">
-            <span className="flex items-center gap-1.5 text-[13px] text-ink-2">
+          <div key={d.name} className="flex min-w-0 items-center justify-between gap-2">
+            <span className="flex min-w-0 items-center gap-1.5 text-[13px] text-ink-2">
               <span
                 aria-hidden
-                className="inline-block h-2.5 w-2.5 rounded-full"
+                className="h-2.5 w-2.5 shrink-0 rounded-full"
                 style={{ background: legendColors.get(d.name) }}
               />
               <IconCircle value={d.icon} label={d.name} variant="tinted" size="sm" />
-              {d.name}
+              <span className="truncate">{d.name}</span>
             </span>
-            <span className="font-display text-[13.5px] font-medium text-ink">
+            <span className="shrink-0 font-display text-[13.5px] font-medium text-ink">
               {formatMoney(d.amount)}
             </span>
           </div>

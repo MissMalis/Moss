@@ -3,7 +3,23 @@ import { updateSettings, saveApiKey, removeApiKey } from "@/lib/actions/settings
 import { seedDemoData } from "@/lib/actions/demo";
 import { ClearDataButton } from "@/components/ClearDataButton";
 import { Tooltip } from "@/components/Tooltip";
+import { Dropdown } from "@/components/Dropdown";
 import { BTN_GHOST, BTN_SOLID, CARD, CARD_HEADER, INPUT, LABEL, LINK_QUIET } from "@/lib/ui";
+
+const EARLY_PAY_OPTIONS = [
+  { value: "0", label: "Right on payday" },
+  { value: "1", label: "1 day early" },
+  { value: "2", label: "2 days early" },
+  { value: "3", label: "3 days early" },
+  { value: "4", label: "4 days early" },
+  { value: "5", label: "5 days early" },
+];
+
+const BIZ_SHIFT_OPTIONS = [
+  { value: "none", label: "Don't shift" },
+  { value: "prior", label: "Shift to the day before" },
+  { value: "next", label: "Shift to the day after" },
+];
 
 export default async function SettingsPage() {
   const settings = await getSettings();
@@ -34,18 +50,9 @@ export default async function SettingsPage() {
             Bank pays me early
             <Tooltip text="Some banks post direct deposit a few days before the official payday. This only changes the date Moss expects to see it land — it doesn't move bill due-dates or Safe to spend math." />
           </span>
-          <select
-            name="early_pay_days"
-            defaultValue={settings.early_pay_days}
-            className={`max-w-xs ${INPUT}`}
-          >
-            <option value={0}>Right on payday</option>
-            <option value={1}>1 day early</option>
-            <option value={2}>2 days early</option>
-            <option value={3}>3 days early</option>
-            <option value={4}>4 days early</option>
-            <option value={5}>5 days early</option>
-          </select>
+          <div className="max-w-xs">
+            <Dropdown name="early_pay_days" options={EARLY_PAY_OPTIONS} defaultValue={String(settings.early_pay_days)} />
+          </div>
         </label>
 
         <label className={LABEL}>
@@ -53,11 +60,9 @@ export default async function SettingsPage() {
             Business-day rule
             <Tooltip text="If a bill or payday lands on a weekend, shift it to the nearest banking day instead. True bank-holiday calendars aren't machine-readable yet, so this only accounts for weekends. Applied after the early-pay offset above." />
           </span>
-          <select name="biz_shift" defaultValue={settings.biz_shift} className={`max-w-xs ${INPUT}`}>
-            <option value="none">Don&apos;t shift</option>
-            <option value="prior">Shift to the day before</option>
-            <option value="next">Shift to the day after</option>
-          </select>
+          <div className="max-w-xs">
+            <Dropdown name="biz_shift" options={BIZ_SHIFT_OPTIONS} defaultValue={settings.biz_shift} />
+          </div>
         </label>
 
         <label className={LABEL}>

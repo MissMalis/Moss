@@ -8,8 +8,10 @@ import {
   accountGroup,
   aggregateSnapshots,
   blendedApr,
+  defaultAccountIcon,
 } from "@/lib/net-worth";
 import { LIABILITY_TYPE_SET } from "@/lib/account-types";
+import { formatMoney } from "@/lib/format";
 import { Money } from "@/components/Money";
 import { NetWorthHero } from "@/components/NetWorthHero";
 import { IconCircle } from "@/components/IconCircle";
@@ -31,18 +33,18 @@ function AccountRow({ a, value, blended }: { a: AccountRowData; value: number; b
   return (
     <Link
       href={`/net-worth/${a.id}`}
-      className="flex items-center gap-3 rounded-lg px-2 py-2 transition hover:bg-card-soft"
+      className="flex items-center gap-3 rounded-lg px-2 py-1.5 transition hover:bg-card-soft"
     >
-      <IconCircle value={a.icon} label={a.name} variant="solid" size="sm" />
+      <IconCircle value={a.icon ?? defaultAccountIcon(a.type)} label={a.name} variant="tinted" size="sm" />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[14px] text-ink">{a.name}</p>
-        <p className="truncate text-[12px] text-ink-3">
+        <p className="truncate text-[13px] text-ink-2">{a.name}</p>
+        <p className="truncate text-[11.5px] text-ink-3">
           {accountTypeLabel(a.type)}
           {apr != null ? ` · ${apr}% ${blended != null ? "blended " : ""}APR` : ""}
           {a.type === "HYSA" && a.apy_pct ? ` · ${a.apy_pct}% APY` : ""}
         </p>
       </div>
-      <Money value={value} size="card" />
+      <span className="shrink-0 font-display text-[13px] font-medium tabular-nums text-ink-2">{formatMoney(value)}</span>
     </Link>
   );
 }
@@ -67,15 +69,15 @@ function GroupRow({
   return (
     <Collapsible
       summary={
-        <div className="flex flex-1 items-center justify-between gap-3 py-2">
-          <p className="text-[13.5px] font-medium text-ink">
-            {label} <span className="font-normal text-ink-3">· {pct}% of {pctLabel}</span>
+        <div className="flex flex-1 items-center justify-between gap-3 py-2.5">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-ink-3">
+            {label} <span className="normal-case">· {pct}% of {pctLabel}</span>
           </p>
-          <Money value={total} size="card" />
+          <Money value={total} size="subtotal" />
         </div>
       }
     >
-      <div className="space-y-0.5 pb-2 pl-1">
+      <div className="space-y-0.5 py-1 pl-5">
         {accountsInGroup.map((a) => (
           <AccountRow key={a.id} a={a} value={valueById.get(a.id) ?? 0} blended={blendedByAccount.get(a.id) ?? null} />
         ))}
