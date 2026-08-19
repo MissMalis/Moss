@@ -448,9 +448,10 @@ alter table deductions add constraint deductions_tax_treatment_check
 -- quarantined elsewhere (rewards card -> Sweep; investing/stored-value
 -- spend -> that account's own balance, no Safe-to-Spend impact).
 alter table purchases add column if not exists payment_source text default 'checking';
-alter table purchases drop constraint if exists purchases_payment_source_check;
-alter table purchases add constraint purchases_payment_source_check
-  check (payment_source in ('checking', 'investing', 'stored_value'));
+-- (the payment_source check constraint is added once, below in §7, after
+-- 'rewards_card' becomes a valid value — an intermediate narrower version
+-- used to live here too, but replaying it against a live table that
+-- already has rewards_card rows always fails, so it's gone.)
 alter table purchases add column if not exists source_account_id uuid references accounts on delete set null;
 
 -- §4: HYSA interest and per-account annual contribution limits (informational
