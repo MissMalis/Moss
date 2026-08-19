@@ -10,12 +10,14 @@ import { Modal } from "@/components/Modal";
 export function AddButton({
   label,
   children,
+  wide,
 }: {
   label: string;
   children: React.ReactNode;
+  wide?: boolean;
 }) {
   return (
-    <Modal label={label} title={label}>
+    <Modal label={label} title={label} wide={wide}>
       {children}
     </Modal>
   );

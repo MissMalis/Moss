@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { computeRingLayout } from "@/lib/ring-layout";
 import { candyColorsForCategories } from "@/lib/candy-colors";
 import { formatCompactMoney, formatMoney } from "@/lib/format";
-import { IconCircle } from "@/components/IconCircle";
 
 export interface RingCategory {
   name: string;
@@ -87,7 +86,13 @@ export function SpendingRing({ data }: { data: RingCategory[] }) {
   const legendColors = candyColorsForCategories(data.map((d) => d.name));
 
   return (
-    <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-center sm:gap-8">
+    // Rev 08 #13: ring and legend stack (never side-by-side) — sharing a
+    // row left the legend fighting the 240px ring for width inside a
+    // narrower card (e.g. the 1fr side of Expenses' 1.4fr/1fr split),
+    // squeezing its 2 columns too narrow for full names + amounts and
+    // pushing content past the card's edge. Stacked, the legend always
+    // gets the card's full width to lay out properly.
+    <div className="flex flex-col items-center gap-4">
       <svg
         width={SIZE}
         height={SIZE}
@@ -132,17 +137,24 @@ export function SpendingRing({ data }: { data: RingCategory[] }) {
         </text>
       </svg>
 
-      <div className="grid w-full grid-cols-2 gap-x-5 gap-y-2.5 sm:max-w-sm">
+      {/*
+        Rev 08 #13: a rigid 2-col grid forced long category names to
+        truncate to fit an equal-width cell. CSS multi-column flow instead
+        — each entry is a full-width block within its column (so the name
+        never needs an ellipsis, it just wraps), and `break-inside-avoid`
+        keeps a [dot / name / amount] row from splitting across columns.
+        `data` already arrives sorted by amount descending.
+      */}
+      <div className="w-full columns-2 gap-x-6">
         {data.map((d) => (
-          <div key={d.name} className="flex min-w-0 items-center justify-between gap-2">
-            <span className="flex min-w-0 items-center gap-1.5 text-[13px] text-ink-2">
+          <div key={d.name} className="mb-2.5 flex items-center justify-between gap-2 break-inside-avoid-column">
+            <span className="flex items-center gap-1.5 text-[13px] text-ink-2">
               <span
                 aria-hidden
                 className="h-2.5 w-2.5 shrink-0 rounded-full"
                 style={{ background: legendColors.get(d.name) }}
               />
-              <IconCircle value={d.icon} label={d.name} variant="tinted" size="sm" />
-              <span className="truncate">{d.name}</span>
+              {d.name}
             </span>
             <span className="shrink-0 font-display text-[13.5px] font-medium text-ink">
               {formatMoney(d.amount)}

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { updateAccount } from "@/lib/actions/accounts";
 import { accountTypeLabel } from "@/lib/net-worth";
 import { getLiabilityFieldConfig } from "@/lib/account-field-config";
-import { formatShortDateLabel } from "@/lib/format";
+import { formatShortDateLabel, formatLast4 } from "@/lib/format";
 import { IconPicker } from "@/components/IconPicker";
 import { ActionForm } from "@/components/ActionForm";
 import { BTN_GHOST, BTN_SOLID, CARD, CARD_HEADER, INPUT, LABEL } from "@/lib/ui";
@@ -19,10 +19,6 @@ type LiabilityAccountRow = {
   loan_term_months: number | null;
   balance_updated_at: string | null;
 };
-
-function mask(last4: string | null): string | null {
-  return last4 ? `x${last4}` : null;
-}
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   if (value == null || value === "") return null;
@@ -51,7 +47,7 @@ export function LiabilityDetailsSection({ account }: { account: LiabilityAccount
         <div className="mt-2">
           <Row label="Type" value={accountTypeLabel(account.type)} />
           <Row label="As of" value={account.balance_updated_at ? formatShortDateLabel(account.balance_updated_at.slice(0, 10)) : null} />
-          {cfg.showsCreditCardLast4 && <Row label="Card" value={mask(account.last4)} />}
+          {cfg.showsCreditCardLast4 && <Row label="Card" value={formatLast4(account.last4)} />}
           {cfg.showsTerm && <Row label="Term" value={account.loan_term_months ? `${Math.round(account.loan_term_months / 12)} years` : null} />}
         </div>
       </section>

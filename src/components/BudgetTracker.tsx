@@ -30,7 +30,7 @@ export function BudgetTracker({ budgets, categories }: { budgets: BudgetProgress
           <Tooltip text="Monthly caps that reset on the 1st — separate from the pay-period earmark model above." />
         </div>
         {available.length > 0 && (
-          <AddButton label="Add a budget">
+          <AddButton label="Add a budget" wide>
             <form action={createBudget} className="flex flex-wrap items-end gap-3">
               <label className={LABEL}>
                 Category
@@ -48,11 +48,11 @@ export function BudgetTracker({ budgets, categories }: { budgets: BudgetProgress
         )}
       </div>
 
-      {budgets.length === 0 ? (
-        <p className="mt-3 text-[13px] text-ink-3">No budgets set yet.</p>
-      ) : (
-        <div className={`mt-3 flex-1 space-y-3 ${SCROLL_LIST}`}>
-          {budgets.map((b) => {
+      <div className={`mt-3 space-y-3 ${SCROLL_LIST}`}>
+        {budgets.length === 0 ? (
+          <p className="text-[13px] text-ink-3">No budgets set yet.</p>
+        ) : (
+          budgets.map((b) => {
             const cat = categoryByName.get(b.category);
             const over = b.spent > b.cap;
             return (
@@ -91,9 +91,9 @@ export function BudgetTracker({ budgets, categories }: { budgets: BudgetProgress
                 </div>
               </div>
             );
-          })}
-        </div>
-      )}
+          })
+        )}
+      </div>
     </div>
   );
 }

@@ -95,14 +95,39 @@ export default async function TodayPage() {
         <p className="mt-0.5 text-[15px] text-ink-2">{formatDateRange(window.start, window.end)}</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.7fr_1fr]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.6fr_1fr]">
         <NetWorthHero total={netWorth.total} points={historyPoints} />
         <AlertsCard items={reviewItems} />
       </div>
 
       <section className={CARD}>
-        <p className={CARD_HEADER}>Safe to spend</p>
-        <Money value={safeToSpend} size="section" className="text-moss" />
+        <div className="flex items-start justify-between gap-3">
+          <p className={CARD_HEADER}>Safe to spend</p>
+          {!snap.alreadyPosted && (
+            <div className="text-right">
+              <form action={postPaycheck}>
+                <input type="hidden" name="income_source_id" value={snap.primarySource!.id} />
+                <input type="hidden" name="pay_date" value={window.payDate} />
+                <input type="hidden" name="window_start" value={window.start} />
+                <input type="hidden" name="window_end" value={window.end} />
+                <input type="hidden" name="net_income" value={income} />
+                <button type="submit" className={BTN_MOSS}>
+                  Confirm {formatShortDateLabel(window.payDate)} paycheck
+                </button>
+              </form>
+              {(() => {
+                const expected = expectedPayDate(window.payDate, settings.early_pay_days, settings.biz_shift);
+                return expected !== window.payDate ? (
+                  <p className="mt-1.5 flex items-center justify-end gap-1 text-[11.5px] text-ink-3">
+                    Bank shows it {formatShortDateLabel(expected)}
+                    <Tooltip text="Based on your early-pay and business-day settings — the pay-period window itself still runs off the official payday." />
+                  </p>
+                ) : null;
+              })()}
+            </div>
+          )}
+        </div>
+        <Money value={safeToSpend} size="section" className="mt-2 text-moss" />
 
         <div className="ml-[29px] mt-3 inline-flex items-center gap-1.5 rounded-full bg-moss-bg px-3 py-1.5 text-[13px] font-medium text-moss">
           {formatMoney(perDay)}/day · {daysLeft} day{daysLeft === 1 ? "" : "s"} left
@@ -170,29 +195,6 @@ export default async function TodayPage() {
           </div>
         )}
 
-        {!snap.alreadyPosted && (
-          <>
-            <form action={postPaycheck} className="mt-4">
-              <input type="hidden" name="income_source_id" value={snap.primarySource!.id} />
-              <input type="hidden" name="pay_date" value={window.payDate} />
-              <input type="hidden" name="window_start" value={window.start} />
-              <input type="hidden" name="window_end" value={window.end} />
-              <input type="hidden" name="net_income" value={income} />
-              <button type="submit" className={BTN_MOSS}>
-                Confirm {formatShortDateLabel(window.payDate)} paycheck
-              </button>
-            </form>
-            {(() => {
-              const expected = expectedPayDate(window.payDate, settings.early_pay_days, settings.biz_shift);
-              return expected !== window.payDate ? (
-                <p className="mt-2 flex items-center gap-1 text-[12.5px] text-ink-3">
-                  Your bank will likely show it on {formatShortDateLabel(expected)}
-                  <Tooltip text="Based on your early-pay and business-day settings — the pay-period window itself still runs off the official payday." />
-                </p>
-              ) : null;
-            })()}
-          </>
-        )}
       </section>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -203,13 +205,13 @@ export default async function TodayPage() {
               See all →
             </Link>
           </p>
-          {recentGroups.length === 0 ? (
-            <p className="mt-3 text-[13px] text-ink-3">Nothing logged recently.</p>
-          ) : (
-            <div className={`mt-3 flex-1 ${SCROLL_LIST}`}>
+          <div className={`mt-3 ${SCROLL_LIST}`}>
+            {recentGroups.length === 0 ? (
+              <p className="text-[13px] text-ink-3">Nothing logged recently.</p>
+            ) : (
               <RecentList groups={recentGroups} />
-            </div>
-          )}
+            )}
+          </div>
         </section>
 
         <section className={`${CARD} flex h-full flex-col`}>

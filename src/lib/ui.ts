@@ -30,9 +30,11 @@ export const ROW = "rounded-lg border border-border bg-card p-3.5";
 // size, same weight, sentence case, no emoji.
 export const CARD_HEADER = "text-[15px] font-medium text-ink";
 
-// Rev 04 §1.7: long lists get a capped height + internal scroll instead of
-// running forever down the page.
-export const SCROLL_LIST = "max-h-[360px] overflow-y-auto pr-1";
+// Rev 04 §1.7/Rev 08 §2: every list-bearing card gets the same FIXED
+// height (not a cap) + internal scroll — a short list doesn't collapse the
+// card, a long one doesn't stretch it. `.scroll-list` (globals.css) hides
+// the scrollbar track until hover and fades the bottom edge.
+export const SCROLL_LIST = "h-[360px] overflow-y-auto pr-1 scroll-list";
 
 // Rev 04 §1.6: the "est" marker for a variable/estimated bill, in its own
 // column to the left of the amount so figures stay right-aligned. No badge

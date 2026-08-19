@@ -35,7 +35,7 @@ export function NetWorthHero({ total, points }: { total: number; points: History
         </div>
       </div>
 
-      <Money value={total} size="section" />
+      <Money value={total} size="section" className="mt-2" />
 
       {deltas && (
         <p className="mt-1.5 flex flex-wrap items-center gap-x-3 text-[13.5px] text-ink-2">
@@ -49,7 +49,9 @@ export function NetWorthHero({ total, points }: { total: number; points: History
         </p>
       )}
 
-      <div className="mt-3 flex items-center gap-4 text-[12px] text-ink-3">
+      {/* Rev 08 #4: legend sits above-right of the graph (was a
+          left-aligned row that read as top-left-over-the-plot). */}
+      <div className="mt-4 flex items-center justify-end gap-3 text-[12px] text-ink-3">
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-1.5 w-3 rounded-full bg-good" aria-hidden />
           Market value
@@ -60,7 +62,7 @@ export function NetWorthHero({ total, points }: { total: number; points: History
         </span>
       </div>
 
-      <div className="mt-2 flex-1">
+      <div className="mt-2 flex-1 -mx-4">
         <NetWorthLines points={rangePoints} variant="full" />
       </div>
     </section>

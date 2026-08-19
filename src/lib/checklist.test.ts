@@ -101,7 +101,7 @@ describe("buildReviewChecklist", () => {
       ...noContext,
     });
     expect(items).toHaveLength(1);
-    expect(items[0].message).toBe("Update balance — your 401(k) lump hasn't been refreshed in 43 days");
+    expect(items[0].message).toBe("Your 401(k) lump hasn't been refreshed in 43 days");
   });
 
   it("does not flag a lump balance refreshed recently", () => {
@@ -128,7 +128,7 @@ describe("buildReviewChecklist", () => {
       ...noContext,
     });
     expect(items).toHaveLength(1);
-    expect(items[0].message).toBe("Reload — Transit card is down to $8.00");
+    expect(items[0].message).toBe("Transit card is down to $8.00");
     expect(items[0].href).toBe("/expenses");
   });
 
@@ -185,7 +185,7 @@ describe("buildReviewChecklist", () => {
       lastIncomeChangeISO: "2026-08-05",
     });
     expect(items).toHaveLength(1);
-    expect(items[0].message).toBe("Your paycheck amount changed 8 days ago — check salary and contribution % on your 401(k)");
+    expect(items[0].message).toBe("Your paycheck amount changed 8 days ago. Check salary and contribution % on your 401(k)");
     expect(items[0].href).toBe("/net-worth");
   });
 

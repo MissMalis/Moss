@@ -1,7 +1,9 @@
-// Rev 07 #4: "Paid with" lists the user's actual payable accounts with
-// identifying detail (name · masked last4) instead of generic payment-
-// source type names. Pure — the account/card rows are already fetched by
-// the caller (expenses/page.tsx, expenses/log/page.tsx).
+// Rev 07 #4/Rev 08 #12: "Paid with" lists the user's actual payable
+// accounts with identifying detail (name + masked last4) instead of
+// generic payment-source type names. Pure — the account/card rows are
+// already fetched by the caller (expenses/page.tsx).
+
+import { formatLast4 } from "@/lib/format";
 
 export type PaymentSource = "checking" | "investing" | "stored_value" | "rewards_card";
 
@@ -30,7 +32,8 @@ export interface PayableAccountOption {
 }
 
 function mask(last4: string | null): string {
-  return last4 ? ` ·x${last4}` : "";
+  const masked = formatLast4(last4);
+  return masked ? ` ${masked}` : "";
 }
 
 /** Only accounts that can actually pay for something — checking/savings, HSA, a linked credit card, or prepaid/transit. */

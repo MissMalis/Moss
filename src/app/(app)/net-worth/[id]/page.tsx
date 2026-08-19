@@ -10,7 +10,7 @@ import { deleteAccount } from "@/lib/actions/accounts";
 import { getCardForAccount, listCardMultipliers } from "@/lib/data/cards";
 import { listCategories } from "@/lib/data/recurring";
 import { createCard, updateCard, deleteCard, createMultiplier, deleteMultiplier } from "@/lib/actions/cards";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, formatLast4 } from "@/lib/format";
 import { Money } from "@/components/Money";
 import { NetWorthLines } from "@/components/NetWorthLines";
 import { AddButton } from "@/components/AddButton";
@@ -34,10 +34,6 @@ const NETWORK_OPTIONS = [
   { value: "amex", label: "Amex" },
   { value: "discover", label: "Discover" },
 ];
-
-function mask(last4: string | null): string | null {
-  return last4 ? `x${last4}` : null;
-}
 
 export default async function AccountDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -83,8 +79,8 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
             <h1 className="font-display text-[22px] font-medium text-ink">{account.name}</h1>
             <p className="text-[13px] text-ink-3">
               {accountTypeLabel(account.type)}
-              {mask(account.last4) ? ` · ${mask(account.last4)}` : ""}
-              {mask(account.debit_card_last4) ? ` · card ${mask(account.debit_card_last4)}` : ""}
+              {formatLast4(account.last4) ? ` · ${formatLast4(account.last4)}` : ""}
+              {formatLast4(account.debit_card_last4) ? ` · card ${formatLast4(account.debit_card_last4)}` : ""}
             </p>
           </div>
         </div>
@@ -170,7 +166,7 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
                     <p className="text-[14px] text-ink">{linkedCard.name}</p>
                     <p className="text-[12px] text-ink-3">
                       {linkedCard.network ?? "card"}
-                      {linkedCard.last4 ? ` ${mask(linkedCard.last4)}` : ""} · base {linkedCard.base_multiplier}x
+                      {linkedCard.last4 ? ` ${formatLast4(linkedCard.last4)}` : ""} · base {linkedCard.base_multiplier}x
                     </p>
                   </div>
                 </div>

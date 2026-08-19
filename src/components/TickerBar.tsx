@@ -14,16 +14,18 @@ function formatValue(idx: TickerIndex): string {
 }
 
 /**
- * Rev 05 §3.1: a true full-bleed banner — black, skinny, edge to edge
- * across the full screen width, not a rounded card contained by the
+ * Rev 05 §3.1/Rev 08 #8: a true full-bleed banner — black, skinny, edge to
+ * edge across the full screen width, not a rounded card contained by the
  * layout's max-width. Breaks out of the centered <main> via the classic
- * 100vw + negative-margin trick.
+ * 100vw + negative-margin trick, and pulls up by `<main>`'s own `pt-8`
+ * (the app layout's page-content top padding) so it sits flush against
+ * the nav bar instead of leaving a grey gap.
  */
 export function TickerBar({ indices }: { indices: TickerIndex[] }) {
   if (indices.length === 0) return null;
 
   return (
-    <div className="relative left-1/2 -ml-[50vw] w-screen bg-ink">
+    <div className="relative left-1/2 -mt-8 -ml-[50vw] w-screen bg-ink">
       <div className="mx-auto flex h-10 max-w-[1440px] items-center justify-evenly px-6 md:px-10">
         {indices.map((idx) => {
           const delta = idx.value - idx.prev_close;

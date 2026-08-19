@@ -27,11 +27,15 @@ export function getAssetFieldConfig(type: string): AssetFieldConfig {
   const isHSA = type === "HSA";
   const isHoldingsToggle = HOLDINGS_TOGGLE_TYPES.has(type);
   const isCheckingLike = type === "Checking" || type === "Savings" || type === "HYSA";
+  // Rev 08 #10: last-4 applies to any account type that actually has a
+  // number printed on it — checking-like, brokerage, and legacy
+  // transit/prepaid (Stored-value) rows too, not just checking-like.
+  const showsLast4 = isCheckingLike || type === "Taxable Brokerage" || type === "Stored-value";
 
   return {
     isHoldingsToggle,
     alwaysBothCashAndHoldings: isHSA,
-    showsLast4: isCheckingLike,
+    showsLast4,
     showsLinkedCard: isCheckingLike || isHSA,
     showsAPY: type === "HYSA",
     showsMinCash: isHSA,

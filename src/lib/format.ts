@@ -44,6 +44,16 @@ export function formatMoney(n: number): string {
   return `${sign}$${dollars}.${cents}`;
 }
 
+/**
+ * Rev 08 #10: the one canonical last-4 display, "···· 4021" — used
+ * everywhere an account/card number shows (detail page header, Paid with,
+ * Sweep's card picker) so the same account never shows two different mask
+ * styles depending on which screen picked it.
+ */
+export function formatLast4(last4: string | null | undefined): string | null {
+  return last4 ? `···· ${last4}` : null;
+}
+
 /** "$2.1K" for large amounts, plain "$842" under a thousand. */
 export function formatCompactMoney(n: number): string {
   const sign = n < 0 ? "-" : "";

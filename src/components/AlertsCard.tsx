@@ -26,11 +26,11 @@ export function AlertsCard({ items }: { items: ReviewItem[] }) {
   return (
     <div className={`${CARD} flex h-full flex-col`}>
       <p className={CARD_HEADER}>Alerts</p>
-      {items.length === 0 ? (
-        <p className="mt-3 text-[13px] text-ink-3">Nothing needs a look right now.</p>
-      ) : (
-        <div className={`mt-3 flex-1 ${SCROLL_LIST}`}>
-          {items.map((item) => (
+      <div className={`mt-3 ${SCROLL_LIST}`}>
+        {items.length === 0 ? (
+          <p className="text-[13px] text-ink-3">Nothing needs a look right now.</p>
+        ) : (
+          items.map((item) => (
             <div key={item.id} className="flex items-center gap-2.5 border-b border-border py-2.5 last:border-0">
               <form action={dismissAlert}>
                 <input type="hidden" name="alert_id" value={item.id} />
@@ -51,9 +51,9 @@ export function AlertsCard({ items }: { items: ReviewItem[] }) {
                 <ChevronRight size={16} className="shrink-0 text-ink-3" />
               </Link>
             </div>
-          ))}
-        </div>
-      )}
+          ))
+        )}
+      </div>
     </div>
   );
 }

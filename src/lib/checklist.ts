@@ -67,7 +67,7 @@ export function buildReviewChecklist(params: {
         id: `income-changed-${params.lastIncomeChangeISO.slice(0, 10)}`,
         icon: lucideKey("wallet"),
         actionLabel: "Review 401(k) settings",
-        message: `Your paycheck amount changed ${daysAgo === 0 ? "today" : `${daysAgo} day${daysAgo === 1 ? "" : "s"} ago`} — check salary and contribution % on your 401(k)`,
+        message: `Your paycheck amount changed ${daysAgo === 0 ? "today" : `${daysAgo} day${daysAgo === 1 ? "" : "s"} ago`}. Check salary and contribution % on your 401(k)`,
         href: "/net-worth",
       });
     }
@@ -114,7 +114,7 @@ export function buildReviewChecklist(params: {
             id: `stale-balance-${a.id}`,
             icon: lucideKey("refresh-cw"),
             actionLabel: "Update balance",
-            message: `Update balance — your ${a.name} lump hasn't been refreshed in ${staleDays} days`,
+            message: `Your ${a.name} lump hasn't been refreshed in ${staleDays} days`,
             href: `/net-worth/${a.id}`,
           });
         }
@@ -126,7 +126,7 @@ export function buildReviewChecklist(params: {
         id: `low-stored-${a.id}`,
         icon: lucideKey("credit-card"),
         actionLabel: "Reload",
-        message: `Reload — ${a.name} is down to ${formatMoney(a.balance)}`,
+        message: `${a.name} is down to ${formatMoney(a.balance)}`,
         href: "/expenses",
       });
     }

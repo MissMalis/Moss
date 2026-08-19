@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { listCategories, listRecurringItems, listOccurrencesInRange } from "@/lib/data/recurring";
 import { listIncomeSourcesWithVersions, listPurchasesInRange } from "@/lib/data/income";
 import { listBudgets } from "@/lib/data/budgets";
@@ -28,7 +27,7 @@ import { Dropdown } from "@/components/Dropdown";
 import { Tooltip } from "@/components/Tooltip";
 import { buildPayableAccounts } from "@/lib/payable-accounts";
 import { lucideKey } from "@/lib/icons";
-import { BTN_SOLID, CARD, CARD_HEADER, INPUT, LABEL, LINK_QUIET, SCROLL_LIST } from "@/lib/ui";
+import { BTN_SOLID, CARD, CARD_HEADER, INPUT, LABEL, SCROLL_LIST } from "@/lib/ui";
 
 const DEFAULT_CATEGORY_ICON = lucideKey("credit-card");
 
@@ -185,16 +184,14 @@ export default async function RecurringBillsPage() {
 
       <div className={CARD}>
         <div className="flex items-center gap-1">
-          <p className={CARD_HEADER}>All recurring bills</p>
+          <p className={CARD_HEADER}>All bills</p>
           <Tooltip text="Mark posted confirms a bill cleared (and for variable bills, records the real amount). Edit once changes just this occurrence. Edit going forward changes the recurring default. Skip releases this occurrence's earmark without posting it." />
         </div>
-        {items.length === 0 ? (
-          <div className="mt-3">
+        <div className={`mt-3 space-y-1 ${SCROLL_LIST}`}>
+          {items.length === 0 ? (
             <EmptyState icon={lucideKey("receipt")} title="No recurring bills yet" hint="Add your first one above." />
-          </div>
-        ) : (
-          <div className={`mt-3 space-y-1 ${SCROLL_LIST}`}>
-            {items.map((item) => {
+          ) : (
+            items.map((item) => {
               const category = item.category_id ? categoryById.get(item.category_id) : null;
               const nextDate = nextOccurrenceOnOrAfter({ day: item.day_of_month }, todayISO);
               return (
@@ -258,26 +255,21 @@ export default async function RecurringBillsPage() {
                   }
                 />
               );
-            })}
-          </div>
-        )}
+            })
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
         <div className={CARD}>
-          <p className={CARD_HEADER}>
-            This month&apos;s expenses{" "}
-            <Link href="/expenses/log" className={`${LINK_QUIET} ml-1`}>
-              Log one →
-            </Link>
-          </p>
-          {monthGroups.length === 0 ? (
-            <p className="mt-3 text-[13px] text-ink-3">Nothing logged this month yet.</p>
-          ) : (
-            <div className={`mt-3 ${SCROLL_LIST}`}>
+          <p className={CARD_HEADER}>This month&apos;s expenses</p>
+          <div className={`mt-3 ${SCROLL_LIST}`}>
+            {monthGroups.length === 0 ? (
+              <p className="text-[13px] text-ink-3">Nothing logged this month yet.</p>
+            ) : (
               <RecentList groups={monthGroups} />
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         <div className={CARD}>

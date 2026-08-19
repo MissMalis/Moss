@@ -142,9 +142,9 @@ async function writeDemoDataset(supabase: Client, userId: string) {
   // ---- Accounts ----
   const accountsToInsert = [
     { name: "Checking", type: "Checking", balance: 3200, last4: "4821" },
-    { name: "HYSA", type: "HYSA", balance: 11500, apy_pct: 4.25 },
+    { name: "HYSA", type: "HYSA", balance: 11500, apy_pct: 4.25, last4: "7743" },
     { name: "Buffer", type: "Checking", balance: 95, is_forbidden_money: true, icon: lucideKey("wallet") },
-    { name: "Transit card", type: "Stored-value", balance: 8, icon: lucideKey("train") },
+    { name: "Transit card", type: "Stored-value", balance: 8, icon: lucideKey("train"), last4: "3390" },
     {
       name: "HSA",
       type: "HSA",
@@ -154,6 +154,7 @@ async function writeDemoDataset(supabase: Client, userId: string) {
       system_key: "hsa",
       annual_contribution_limit: 4300,
       balance_updated_at: today.toISOString(),
+      debit_card_last4: "6612",
     },
     {
       name: "401(k)",
@@ -176,8 +177,10 @@ async function writeDemoDataset(supabase: Client, userId: string) {
       system_key: "roth_ira",
       balance_updated_at: today.toISOString(),
     },
-    { name: "Taxable Brokerage", type: "Taxable Brokerage", balance: 0 },
-    { name: "Credit card", type: "Credit card", balance: 2400, apr_pct: 22.9 },
+    { name: "Taxable Brokerage", type: "Taxable Brokerage", balance: 0, last4: "9058" },
+    // last4 matches the linked Amex Gold card below, so the account
+    // header and the card both show the same number.
+    { name: "Credit card", type: "Credit card", balance: 2400, apr_pct: 22.9, last4: "1005" },
     { name: "Car loan", type: "Auto loan", balance: 9800, apr_pct: 6.4, loan_term_months: 60 },
     { name: "Student loans", type: "Student loans", balance: 14500, apr_pct: 5.2 },
   ] as const;

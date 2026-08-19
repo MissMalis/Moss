@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { smoothAreaPath, smoothBandPath, smoothLinePath, type Point } from "@/lib/svg-path";
 import { formatMonthLabel, formatMoney, formatShortDateLabel } from "@/lib/format";
 import type { HistoryPoint } from "@/lib/net-worth";
@@ -20,15 +20,40 @@ function scale(points: HistoryPoint[], width: number, height: number, padLeft: n
   return { x, y, maxVal, innerH };
 }
 
-const WIDTH = 640;
+const FALLBACK_WIDTH = 640;
 const HEIGHT = 220;
 const PAD_LEFT = 44;
 const PAD_BOTTOM = 24;
 
-/** Rev 05 §1.11: every graph fills its card and is hoverable — a vertical guide + tooltip at the nearest point. */
+/**
+ * Rev 05 §1.11/Rev 08 #3: every graph fills its card and is hoverable — a
+ * vertical guide + tooltip at the nearest point.
+ *
+ * The viewBox's width is measured from the actual container, not a fixed
+ * constant — an earlier fix (`preserveAspectRatio="none"` with a 640-unit
+ * viewBox stretched to a wider container) closed the "dead space on the
+ * right" gap but scaled X and Y independently, which warps stroke widths,
+ * circle radii, and text glyphs (SVG applies that same non-uniform
+ * transform to every child, not just the path geometry). Matching the
+ * viewBox to the real pixel width makes the scale factor 1:1 on both axes
+ * — full width AND no distortion.
+ */
 export function NetWorthLines({ points, variant = "full" }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const [measuredWidth, setMeasuredWidth] = useState(FALLBACK_WIDTH);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => {
+      const w = entry.contentBoxSize?.[0]?.inlineSize ?? entry.contentRect.width;
+      if (w > 0) setMeasuredWidth(Math.round(w));
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   if (points.length === 0) {
     return variant === "spark" ? (
@@ -56,7 +81,7 @@ export function NetWorthLines({ points, variant = "full" }: Props) {
     );
   }
 
-  const { x, y, maxVal, innerH } = scale(points, WIDTH, HEIGHT, PAD_LEFT, PAD_BOTTOM);
+  const { x, y, maxVal, innerH } = scale(points, measuredWidth, HEIGHT, PAD_LEFT, PAD_BOTTOM);
 
   const marketPts: Point[] = points.map((p, i) => [x(i), y(p.marketValue)]);
   const contribPts: Point[] = points.map((p, i) => [x(i), y(p.contributed)]);
@@ -81,7 +106,7 @@ export function NetWorthLines({ points, variant = "full" }: Props) {
     if (!svg) return;
     const rect = svg.getBoundingClientRect();
     const relX = (e.clientX - rect.left) / rect.width;
-    const viewX = relX * WIDTH;
+    const viewX = relX * measuredWidth;
     // Nearest point by x-position.
     let nearest = 0;
     let best = Infinity;
@@ -96,17 +121,16 @@ export function NetWorthLines({ points, variant = "full" }: Props) {
   }
 
   const hovered = hoverIdx != null ? points[hoverIdx] : null;
-  const tooltipLeft = hoverIdx != null ? (x(hoverIdx) / WIDTH) * 100 : 0;
+  const tooltipLeft = hoverIdx != null ? (x(hoverIdx) / measuredWidth) * 100 : 0;
   const flipTooltip = tooltipLeft > 65;
 
   return (
-    <div className="relative w-full">
+    <div ref={containerRef} className="relative w-full">
       <svg
         ref={svgRef}
         width="100%"
         height={HEIGHT}
-        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-        preserveAspectRatio="none"
+        viewBox={`0 0 ${measuredWidth} ${HEIGHT}`}
         className="block overflow-visible"
         onMouseMove={handleMove}
         onMouseLeave={() => setHoverIdx(null)}

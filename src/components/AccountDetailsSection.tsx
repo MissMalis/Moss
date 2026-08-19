@@ -4,7 +4,7 @@ import { useState } from "react";
 import { updateAccount } from "@/lib/actions/accounts";
 import { accountTypeLabel } from "@/lib/net-worth";
 import { getAssetFieldConfig, assetShowsBalanceField, assetShowsLumpCostBasis } from "@/lib/account-field-config";
-import { formatMoney, formatShortDateLabel } from "@/lib/format";
+import { formatMoney, formatShortDateLabel, formatLast4 } from "@/lib/format";
 import { IconPicker } from "@/components/IconPicker";
 import { ActionForm } from "@/components/ActionForm";
 import { Employer401kMatchFields } from "@/components/Employer401kMatchFields";
@@ -33,10 +33,6 @@ type AccountRow = {
   notes: string | null;
   balance_updated_at: string | null;
 };
-
-function mask(last4: string | null): string | null {
-  return last4 ? `x${last4}` : null;
-}
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   if (value == null || value === "") return null;
@@ -80,9 +76,9 @@ export function AccountDetailsSection({ account }: { account: AccountRow }) {
             />
           )}
           <Row label="As of" value={account.balance_updated_at ? formatShortDateLabel(account.balance_updated_at.slice(0, 10)) : null} />
-          {cfg.showsLast4 && <Row label="Account #" value={mask(account.last4)} />}
+          {cfg.showsLast4 && <Row label="Account #" value={formatLast4(account.last4)} />}
           {(cfg.showsLinkedCard || cfg.showsDebitCardLast4) && (
-            <Row label="Linked card" value={account.debit_card_last4 ? `${account.debit_card_network ?? ""} ${mask(account.debit_card_last4)}`.trim() : null} />
+            <Row label="Linked card" value={account.debit_card_last4 ? `${account.debit_card_network ?? ""} ${formatLast4(account.debit_card_last4)}`.trim() : null} />
           )}
           {cfg.showsAPY && <Row label="APY" value={account.apy_pct ? `${account.apy_pct}%` : null} />}
           {cfg.showsMinCash && <Row label="Minimum-cash threshold" value={account.min_cash != null ? formatMoney(account.min_cash) : null} />}

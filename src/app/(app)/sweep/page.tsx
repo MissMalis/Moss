@@ -44,9 +44,13 @@ export default async function SweepPage() {
   const cardById = new Map(cards.map((c) => [c.id, c]));
   const bufferAccount = accounts.find((a) => a.is_forbidden_money) ?? null;
   const cashAccounts = accounts.filter((a) => a.type === "Cash" || a.type === "Checking" || a.type === "Savings");
-  // Rev 06b v2 §4: only credit-card liabilities are payable here — an auto
-  // loan or mortgage isn't "a card" Sweep can pay off.
-  const liabilityAccounts = accounts.filter((a) => a.type === "Credit card" || a.type === "Liabilities");
+  // Rev 06b v2 §4/Rev 08 #14: only credit-card liabilities are payable
+  // here — an auto loan or mortgage isn't "a card" Sweep can pay off. The
+  // legacy "Liabilities" catch-all type used to be allowed through too,
+  // which is exactly how a Car loan / Student loan row could show up in
+  // this list — its type is that generic legacy string, not a real credit
+  // card, regardless of what its name says.
+  const liabilityAccounts = accounts.filter((a) => a.type === "Credit card");
   const pendingTotal = unswept.reduce((s, c) => s + c.amount, 0);
   const channelingCard = cards.find((c) => c.id === settings.cash_app_card_id) ?? null;
 
@@ -73,8 +77,8 @@ export default async function SweepPage() {
         <h1 className="font-display text-[28px] font-medium text-ink">Sweep</h1>
         <p className="mt-1 text-[13px] text-ink-2">
           Rewards-card charges, logged once on{" "}
-          <Link href="/expenses/log" className="underline decoration-border-strong hover:text-ink">
-            Expenses
+          <Link href="/expenses" className="underline decoration-border-strong hover:text-ink">
+            Bills &amp; expenses
           </Link>
           , land here quarantined from Safe to spend until you sweep them.
         </p>
@@ -89,13 +93,13 @@ export default async function SweepPage() {
 
       <div className={CARD}>
         <p className={CARD_HEADER}>Rewards-card charges</p>
-        {rewardsGroups.length === 0 ? (
-          <p className="mt-3 text-[13px] text-ink-3">Nothing logged yet.</p>
-        ) : (
-          <div className={`mt-3 ${SCROLL_LIST}`}>
+        <div className={`mt-3 ${SCROLL_LIST}`}>
+          {rewardsGroups.length === 0 ? (
+            <p className="text-[13px] text-ink-3">Nothing logged yet.</p>
+          ) : (
             <RecentList groups={rewardsGroups} />
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -108,41 +112,39 @@ export default async function SweepPage() {
             <Money value={pendingTotal} size="card" />
           </div>
 
-          {unswept.length === 0 ? (
-            <div className="mt-4">
+          <div className={`mt-4 space-y-1.5 ${SCROLL_LIST}`}>
+            {unswept.length === 0 ? (
               <EmptyState icon={lucideKey("sparkles")} title="Nothing pending" hint="Charges logged with a rewards card show up here." />
-            </div>
-          ) : (
-            <>
-              <div className={`mt-4 space-y-1.5 ${SCROLL_LIST}`}>
-                {unswept.map((c) => (
-                  <div key={c.id} className={`${ROW} flex items-center gap-3`}>
-                    <input
-                      type="checkbox"
-                      form="sweep-select-form"
-                      name="ids"
-                      value={c.id}
-                      defaultChecked
-                      className="h-4 w-4 shrink-0 rounded border-border-strong accent-moss"
-                      aria-label={`Include ${c.name}`}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[13.5px] text-ink">{c.name}</p>
-                      <p className="truncate text-[12px] text-ink-3">
-                        {cardById.get(c.card_id)?.name ?? "—"} · {formatShortDateLabel(c.spent_on)}
-                      </p>
-                    </div>
-                    <span className="shrink-0 text-[13.5px] text-ink tabular-nums">{formatMoney(c.amount)}</span>
-                    <ConfirmDeleteButton action={deleteCardCharge} hiddenFields={{ id: c.id }} itemLabel={c.name} variant="link" />
+            ) : (
+              unswept.map((c) => (
+                <div key={c.id} className={`${ROW} flex items-center gap-3`}>
+                  <input
+                    type="checkbox"
+                    form="sweep-select-form"
+                    name="ids"
+                    value={c.id}
+                    defaultChecked
+                    className="h-4 w-4 shrink-0 rounded border-border-strong accent-moss"
+                    aria-label={`Include ${c.name}`}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13.5px] text-ink">{c.name}</p>
+                    <p className="truncate text-[12px] text-ink-3">
+                      {cardById.get(c.card_id)?.name ?? "—"} · {formatShortDateLabel(c.spent_on)}
+                    </p>
                   </div>
-                ))}
-              </div>
-              <ActionForm id="sweep-select-form" action={sweepPendingCharges} className="mt-3">
-                <button type="submit" className={BTN_MOSS}>
-                  Sweep selected
-                </button>
-              </ActionForm>
-            </>
+                  <span className="shrink-0 text-[13.5px] text-ink tabular-nums">{formatMoney(c.amount)}</span>
+                  <ConfirmDeleteButton action={deleteCardCharge} hiddenFields={{ id: c.id }} itemLabel={c.name} variant="link" />
+                </div>
+              ))
+            )}
+          </div>
+          {unswept.length > 0 && (
+            <ActionForm id="sweep-select-form" action={sweepPendingCharges} className="mt-3">
+              <button type="submit" className={BTN_MOSS}>
+                Sweep selected
+              </button>
+            </ActionForm>
           )}
         </div>
 
@@ -158,6 +160,7 @@ export default async function SweepPage() {
               recentSwept={recentSwept}
               cards={cards}
               liabilityAccounts={liabilityAccounts}
+              categories={categories}
             />
           ) : (
             <div className="mt-4">

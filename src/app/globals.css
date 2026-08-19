@@ -70,3 +70,29 @@ body {
   background: var(--color-ink);
   color: var(--color-bg);
 }
+
+/* Rev 08 #2: fixed-height widget cards scroll internally instead of
+   growing/shrinking with content — no visible scrollbar track until
+   hover, plus a bottom fade hinting there's more below. */
+.scroll-list {
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 20px), transparent 100%);
+  mask-image: linear-gradient(to bottom, black calc(100% - 20px), transparent 100%);
+}
+.scroll-list:hover {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+.scroll-list::-webkit-scrollbar {
+  width: 6px;
+}
+.scroll-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-list::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 999px;
+}
+.scroll-list:hover::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+}

@@ -1,4 +1,5 @@
 import { createElement } from "react";
+import { Circle } from "lucide-react";
 import { resolveLucideIcon, isDataUrlValue, resolveEmoji } from "@/lib/icons";
 import { candyColorForCategory } from "@/lib/candy-colors";
 
@@ -8,7 +9,13 @@ const SIZES = { sm: 26, md: 34, lg: 44 } as const;
  * Rev 05 §1.1/§1.2: the two icon treatments used throughout the standard
  * row — "solid" (bill/item identity, left column: colored circle + first
  * letter, or a real logo) and "tinted" (category symbol, middle column:
- * the category's icon in a soft-tinted circle of its own color). No emoji.
+ * the category's icon in a soft-tinted circle of its own color).
+ *
+ * Rev 08 #1: a "tinted" circle with no resolvable icon/emoji (e.g. a
+ * category created without picking one) must NEVER fall back to a bare
+ * letter — that's the repeat-offender bug. It falls back to a neutral
+ * generic circle glyph instead. "solid" identity dots (bills/accounts)
+ * keep their letter-avatar fallback — that one was never broken.
  */
 export function IconCircle({
   value,
@@ -46,6 +53,8 @@ export function IconCircle({
         <span style={{ fontSize: Math.round(px * 0.55), lineHeight: 1 }}>{emoji}</span>
       ) : iconComponent ? (
         createElement(iconComponent, { size: Math.round(px * 0.55), color: foreground, strokeWidth: 2 })
+      ) : variant === "tinted" ? (
+        <Circle size={Math.round(px * 0.55)} color={foreground} strokeWidth={2} />
       ) : (
         <span className="text-[13px] font-medium" style={{ color: foreground }}>
           {label.charAt(0).toUpperCase()}

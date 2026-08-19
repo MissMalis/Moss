@@ -7,7 +7,7 @@ describe("buildPayableAccounts", () => {
       [{ id: "a1", name: "TD Checking", type: "Checking", last4: "1234", debit_card_last4: null, is_forbidden_money: false }],
       [],
     );
-    expect(options).toEqual([{ id: "a1", label: "TD Checking ·x1234", paymentSource: "checking", sourceAccountId: "a1", cardId: null }]);
+    expect(options).toEqual([{ id: "a1", label: "TD Checking ···· 1234", paymentSource: "checking", sourceAccountId: "a1", cardId: null }]);
   });
 
   it("lists HSA using its debit-card last4, routed to investing", () => {
@@ -15,7 +15,7 @@ describe("buildPayableAccounts", () => {
       [{ id: "a2", name: "HSA", type: "HSA", last4: null, debit_card_last4: "5678", is_forbidden_money: false }],
       [],
     );
-    expect(options[0]).toEqual({ id: "a2", label: "HSA ·x5678", paymentSource: "investing", sourceAccountId: "a2", cardId: null });
+    expect(options[0]).toEqual({ id: "a2", label: "HSA ···· 5678", paymentSource: "investing", sourceAccountId: "a2", cardId: null });
   });
 
   it("lists a credit card by the linked card's own name+last4, routed to rewards_card", () => {
@@ -23,7 +23,7 @@ describe("buildPayableAccounts", () => {
       [{ id: "a3", name: "Amex Liability", type: "Credit card", last4: null, debit_card_last4: null, is_forbidden_money: false }],
       [{ id: "c1", name: "Amex Gold", last4: "1005", account_id: "a3" }],
     );
-    expect(options[0]).toEqual({ id: "a3", label: "Amex Gold ·x1005", paymentSource: "rewards_card", sourceAccountId: null, cardId: "c1" });
+    expect(options[0]).toEqual({ id: "a3", label: "Amex Gold ···· 1005", paymentSource: "rewards_card", sourceAccountId: null, cardId: "c1" });
   });
 
   it("skips a credit-card liability with no linked card", () => {

@@ -11,7 +11,7 @@ const NAV = [
   { href: "/today", label: "Dashboard" },
   { href: "/net-worth", label: "Net worth" },
   { href: "/income", label: "Income" },
-  { href: "/expenses", label: "Expenses" },
+  { href: "/expenses", label: "Bills & expenses" },
   { href: "/sweep", label: "Sweep" },
   { href: "/history", label: "History" },
   { href: "/settings", label: "Settings" },
