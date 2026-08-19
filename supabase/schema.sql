@@ -731,17 +731,12 @@ alter table accounts add column if not exists debit_card_network text;
 -- a raw FK-violation error) fired whenever a bill/charge referenced the
 -- category being deleted.
 
--- De-dupe any categories the old bug already created before the unique
--- constraint below can be added — keeps the lowest id per (user_id, name),
--- drops the rest. Anything that referenced a dropped duplicate falls back
--- to "no category" via the ON DELETE SET NULL added next, not an error.
-delete from categories a using categories b
-where a.user_id = b.user_id and a.name = b.name and a.id > b.id;
-
--- Re-point both FKs to SET NULL on delete (findable by relation, not by a
--- guessed constraint name, since Postgres's auto-generated name isn't
--- guaranteed) so deleting a category detaches it from anything that used
--- it instead of throwing.
+-- Re-point both FKs to SET NULL on delete FIRST (findable by relation, not
+-- by a guessed constraint name, since Postgres's auto-generated name isn't
+-- guaranteed) — this has to happen before the dedupe delete below, or the
+-- still-restrictive default FK blocks deleting any duplicate that's
+-- actually referenced by a bill/charge, which is exactly the case the
+-- dedupe exists to clean up.
 do $$
 declare
   con record;
@@ -777,6 +772,13 @@ end $$;
 alter table card_charges
   add constraint card_charges_category_id_fkey
   foreign key (category_id) references categories on delete set null;
+
+-- De-dupe any categories the old bug already created before the unique
+-- constraint below can be added — keeps the lowest id per (user_id, name),
+-- drops the rest. Anything that referenced a dropped duplicate falls back
+-- to "no category" via the ON DELETE SET NULL added above, not an error.
+delete from categories a using categories b
+where a.user_id = b.user_id and a.name = b.name and a.id > b.id;
 
 -- Now safe to add — the dedupe above guarantees no existing violation.
 do $$
