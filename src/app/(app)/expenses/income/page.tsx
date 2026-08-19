@@ -1,28 +1,53 @@
 import { listIncomeSourcesWithVersions, currentIncomeAmount } from "@/lib/data/income";
+import { listPayPeriodsInRange } from "@/lib/data/history";
 import { deleteIncomeSource, addIncomeAmountVersion } from "@/lib/actions/income";
 import { formatMoney, describeFrequency, formatShortDateLabel } from "@/lib/format";
+import { groupByDate, type TransactionLike } from "@/lib/recent-transactions";
 import { IncomeSourceForm } from "@/components/IncomeSourceForm";
 import { AddButton } from "@/components/AddButton";
 import { RowMenu } from "@/components/RowMenu";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
+import { RecentList } from "@/components/RecentList";
 import { EmptyState } from "@/components/EmptyState";
 import { Tooltip } from "@/components/Tooltip";
 import { lucideKey } from "@/lib/icons";
-import { BTN_SOLID, CARD, CARD_HEADER, INPUT, LABEL, ROW } from "@/lib/ui";
+import { BTN_SOLID, CARD, CARD_HEADER, INPUT, LABEL, ROW, SCROLL_LIST } from "@/lib/ui";
 
-/** Rev 06b §5: Income holds only paychecks now — contributions live on each account's own Net worth detail page. */
-export default async function IncomePage() {
-  const incomeSources = await listIncomeSourcesWithVersions();
+function currentMonthWindow() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+  return { start, end };
+}
+
+/**
+ * Rev 09 §1.2: Income moved from its own top-level nav page into a
+ * Transactions sub-tab — content below is the old /income page verbatim,
+ * plus a new "This month's income" list mirroring "This month's expenses"
+ * (same shared RecentList/SCROLL_LIST, kind: "income" renders green +$).
+ */
+export default async function IncomeTab() {
+  const { start, end } = currentMonthWindow();
+  const [incomeSources, monthPayPeriods] = await Promise.all([
+    listIncomeSourcesWithVersions(),
+    listPayPeriodsInRange(start, end),
+  ]);
+  const sourceById = new Map(incomeSources.map((s) => [s.id, s]));
+
+  const monthTransactions: TransactionLike[] = monthPayPeriods
+    .filter((pp) => pp.net_income != null)
+    .map((pp) => ({
+      id: pp.id,
+      name: (pp.income_source_id ? sourceById.get(pp.income_source_id)?.name : null) ?? "Paycheck",
+      amount: pp.net_income!,
+      date: pp.pay_date,
+      kind: "income",
+      category: null,
+    }));
+  const monthGroups = groupByDate(monthTransactions);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-[28px] font-medium text-ink">Income</h1>
-        <p className="mt-1 text-[13px] text-ink-2">
-          The first stream you add sets the pay-period rhythm the rest of Moss follows.
-        </p>
-      </div>
-
       <div className={CARD}>
         <div className="flex items-center justify-between">
           <p className={CARD_HEADER}>Income sources</p>
@@ -101,6 +126,17 @@ export default async function IncomePage() {
               </div>
             );
           })}
+        </div>
+      </div>
+
+      <div className={CARD}>
+        <p className={CARD_HEADER}>This month&apos;s income</p>
+        <div className={`mt-3 ${SCROLL_LIST}`}>
+          {monthGroups.length === 0 ? (
+            <p className="text-[13px] text-ink-3">Nothing posted this month yet.</p>
+          ) : (
+            <RecentList groups={monthGroups} />
+          )}
         </div>
       </div>
     </div>

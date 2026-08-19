@@ -17,6 +17,7 @@ type AccountRow = {
   name: string;
   type: string;
   icon: string | null;
+  institution: string | null;
   balance: number;
   starting_contributed: number;
   apy_pct: number | null;
@@ -69,6 +70,7 @@ export function AccountDetailsSection({ account }: { account: AccountRow }) {
         </div>
         <div className="mt-2">
           <Row label="Type" value={accountTypeLabel(account.type)} />
+          <Row label="Institution" value={account.institution} />
           {showsBalance && (
             <Row
               label={cfg.alwaysBothCashAndHoldings ? "Cash sleeve" : cfg.isHoldingsToggle ? "Total value" : "Balance"}
@@ -122,6 +124,10 @@ export function AccountDetailsSection({ account }: { account: AccountRow }) {
         </div>
 
         <div className="flex flex-wrap items-end gap-3">
+          <label className={LABEL}>
+            Institution
+            <input name="institution" defaultValue={account.institution ?? ""} placeholder="TD Bank" className={`w-40 ${INPUT}`} />
+          </label>
           {showsBalance && !cfg.isHoldingsToggle && (
             <label className={LABEL}>
               {cfg.alwaysBothCashAndHoldings ? "Cash sleeve" : "Balance"}

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ActionForm } from "@/components/ActionForm";
 import { postOccurrence, unpostOccurrence } from "@/lib/actions/recurring";
-import { BTN_SOLID, INPUT } from "@/lib/ui";
+import { BTN_GHOST, BTN_SOLID, INPUT } from "@/lib/ui";
 
 const BOX = "flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded border text-[11px] transition";
 
@@ -66,9 +66,13 @@ export function MarkPostedCheckbox({
       />
       {asking && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4" onClick={() => setAsking(false)}>
-          <div className="w-full max-w-xs rounded-xl border border-border bg-card p-4 shadow-lg" onClick={(e) => e.stopPropagation()}>
+          <div
+            /* Rev 09 §8: one standard modal size everywhere. */
+            className="w-full max-w-[480px] rounded-xl border border-border bg-card p-5 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
             <p className="text-[13.5px] font-medium text-ink">What was the actual amount?</p>
-            <ActionForm action={postOccurrence} onSuccess={() => setAsking(false)} className="mt-3 flex items-center gap-2">
+            <ActionForm action={postOccurrence} onSuccess={() => setAsking(false)} className="mt-3 flex flex-col gap-3">
               <input type="hidden" name="recurring_item_id" value={recurringItemId} />
               <input type="hidden" name="occ_date" value={occDate} />
               <input
@@ -77,11 +81,16 @@ export function MarkPostedCheckbox({
                 name="actual_amount"
                 autoFocus
                 defaultValue={estimatedAmount}
-                className={`flex-1 ${INPUT}`}
+                className={INPUT}
               />
-              <button type="submit" className={BTN_SOLID}>
-                Confirm
-              </button>
+              <div className="flex justify-end gap-2">
+                <button type="button" onClick={() => setAsking(false)} className={BTN_GHOST}>
+                  Cancel
+                </button>
+                <button type="submit" className={BTN_SOLID}>
+                  Confirm
+                </button>
+              </div>
             </ActionForm>
           </div>
         </div>

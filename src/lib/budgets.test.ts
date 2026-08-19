@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeBudgetProgress } from "./budgets";
+import { computeBudgetProgress, computeBudgetEarmark } from "./budgets";
 
 describe("computeBudgetProgress", () => {
   it("sums checking-sourced purchases in the category, ignoring other payment sources", () => {
@@ -26,5 +26,50 @@ describe("computeBudgetProgress", () => {
   it("returns 0 spent for a budget with no matching purchases", () => {
     const result = computeBudgetProgress([{ id: "b1", category: "Play", cap_amount: 150 }], []);
     expect(result[0]).toEqual({ id: "b1", category: "Play", cap: 150, spent: 0, pct: 0 });
+  });
+});
+
+describe("computeBudgetEarmark", () => {
+  it("earmarks the full cap on the 1st regardless of spend so far", () => {
+    const total = computeBudgetEarmark(
+      [{ id: "b1", category: "Food", cap_amount: 200 }],
+      new Map([["Food", 60]]),
+      "2026-08-01",
+      "2026-08-14",
+    );
+    expect(total).toBe(200);
+  });
+
+  it("grows past the cap once spend exceeds it — only the overspend is extra", () => {
+    const total = computeBudgetEarmark(
+      [{ id: "b1", category: "Food", cap_amount: 200 }],
+      new Map([["Food", 250]]),
+      "2026-08-01",
+      "2026-08-14",
+    );
+    expect(total).toBe(250);
+  });
+
+  it("contributes zero for a window that doesn't contain the 1st — already earmarked earlier", () => {
+    const total = computeBudgetEarmark(
+      [{ id: "b1", category: "Food", cap_amount: 200 }],
+      new Map([["Food", 250]]),
+      "2026-08-15",
+      "2026-08-28",
+    );
+    expect(total).toBe(0);
+  });
+
+  it("sums multiple budgets that all earmark in the same window", () => {
+    const total = computeBudgetEarmark(
+      [
+        { id: "b1", category: "Food", cap_amount: 200 },
+        { id: "b2", category: "Play", cap_amount: 50 },
+      ],
+      new Map([["Food", 10]]),
+      "2026-08-01",
+      "2026-08-14",
+    );
+    expect(total).toBe(250);
   });
 });

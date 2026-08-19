@@ -23,3 +23,16 @@ export async function listRecentPayPeriods(sinceISO: string) {
   if (error) throw error;
   return data;
 }
+
+/** Rev 09 §1.2: pay dates within an explicit window, for the Income tab's "This month's income" list. */
+export async function listPayPeriodsInRange(startISO: string, endISO: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("pay_periods")
+    .select("*")
+    .gte("pay_date", startISO)
+    .lte("pay_date", endISO)
+    .order("pay_date", { ascending: false });
+  if (error) throw error;
+  return data;
+}

@@ -7,7 +7,7 @@ import { AddButton } from "@/components/AddButton";
 import { HoldingFields } from "@/components/TickerPriceField";
 import { EmptyState } from "@/components/EmptyState";
 import { lucideKey } from "@/lib/icons";
-import { BTN_GHOST, CARD, CARD_HEADER, LINK_QUIET } from "@/lib/ui";
+import { BTN_GHOST, BTN_SOLID, CARD, CARD_HEADER, LINK_QUIET } from "@/lib/ui";
 
 interface HoldingRow {
   id: string;
@@ -86,9 +86,11 @@ export function HoldingsSection({ accountId, holdings }: { accountId: string; ho
               <div className={ADD_POSITION_GRID}>
                 <HoldingFields />
               </div>
-              <button type="submit" className={`${BTN_GHOST} self-start`}>
-                Add position
-              </button>
+              <div className="flex justify-end">
+                <button type="submit" className={BTN_SOLID}>
+                  Add position
+                </button>
+              </div>
             </form>
           </AddButton>
         </div>

@@ -39,7 +39,8 @@ export function ConfirmDeleteButton({
           onClick={() => setConfirming(false)}
         >
           <div
-            className="w-full max-w-sm rounded-xl border border-border bg-card p-5 shadow-lg"
+            /* Rev 09 §8: one standard modal size everywhere. */
+            className="w-full max-w-[480px] rounded-xl border border-border bg-card p-5 shadow-lg"
             onClick={(e) => e.stopPropagation()}
           >
             <p className="text-[15px] font-medium text-ink">Delete {itemLabel}?</p>

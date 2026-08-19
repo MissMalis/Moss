@@ -26,7 +26,7 @@ import { RowMenu } from "@/components/RowMenu";
 import { Tooltip } from "@/components/Tooltip";
 import { Dropdown } from "@/components/Dropdown";
 import { CONTRIBUTION_TYPES } from "@/lib/account-types";
-import { BTN_GHOST, CARD, CARD_HEADER, INPUT, LABEL, LINK_QUIET } from "@/lib/ui";
+import { BTN_GHOST, BTN_SOLID, CARD, CARD_HEADER, INPUT, LABEL, LINK_QUIET } from "@/lib/ui";
 
 const NETWORK_OPTIONS = [
   { value: "visa", label: "Visa" },
@@ -77,9 +77,11 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
           <IconCircle value={account.icon ?? defaultAccountIcon(account.type)} label={account.name} variant="solid" />
           <div>
             <h1 className="font-display text-[22px] font-medium text-ink">{account.name}</h1>
+            {/* Rev 09 §6.4: "Checking · TD Bank · acct ···· 1234 · card ···· 5678" — only the fields relevant to this account. */}
             <p className="text-[13px] text-ink-3">
               {accountTypeLabel(account.type)}
-              {formatLast4(account.last4) ? ` · ${formatLast4(account.last4)}` : ""}
+              {account.institution ? ` · ${account.institution}` : ""}
+              {formatLast4(account.last4) ? ` · ${isLiability ? "card" : "acct"} ${formatLast4(account.last4)}` : ""}
               {formatLast4(account.debit_card_last4) ? ` · card ${formatLast4(account.debit_card_last4)}` : ""}
             </p>
           </div>
@@ -151,9 +153,11 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
                     Card color
                     <input type="color" name="color" defaultValue="#14181C" className="h-9 w-14 rounded-lg border border-border" />
                   </label>
-                  <button type="submit" className={BTN_GHOST}>
-                    Link card
-                  </button>
+                  <div className="mt-1 flex w-full justify-end">
+                    <button type="submit" className={BTN_SOLID}>
+                      Link card
+                    </button>
+                  </div>
                 </form>
               </AddButton>
             </div>

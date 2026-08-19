@@ -1,12 +1,10 @@
 import { listCategories, listRecurringItems, listOccurrencesInRange } from "@/lib/data/recurring";
 import { listIncomeSourcesWithVersions, listPurchasesInRange } from "@/lib/data/income";
-import { listBudgets } from "@/lib/data/budgets";
 import { listAccounts } from "@/lib/data/accounts";
 import { listCards } from "@/lib/data/cards";
 import { getSettings } from "@/lib/data/settings";
 import { createRecurringItem, updateRecurringItem, toggleRecurringItemActive, deleteRecurringItem } from "@/lib/actions/recurring";
 import { buildOccurrencesForWindow, sumEarmarked } from "@/lib/recurring";
-import { computeBudgetProgress } from "@/lib/budgets";
 import { windowsAround, findCurrentWindow, findFutureWindows } from "@/lib/today";
 import { nextOccurrenceOnOrAfter } from "@/lib/periods";
 import { formatMoney, formatDateRange } from "@/lib/format";
@@ -16,7 +14,6 @@ import { EmptyState } from "@/components/EmptyState";
 import { IconCircle } from "@/components/IconCircle";
 import { CountdownBadge } from "@/components/CountdownBadge";
 import { PayPeriodToggle } from "@/components/PayPeriodToggle";
-import { BudgetTracker } from "@/components/BudgetTracker";
 import { StandardRow } from "@/components/StandardRow";
 import { RowMenu } from "@/components/RowMenu";
 import { ConfirmDeleteButton } from "@/components/ConfirmDeleteButton";
@@ -41,12 +38,11 @@ function currentMonthWindow() {
 export default async function RecurringBillsPage() {
   const todayISO = new Date().toISOString().slice(0, 10);
   const { start, end } = currentMonthWindow();
-  const [categories, items, incomeSources, monthPurchases, budgetRows, accounts, cards, settings] = await Promise.all([
+  const [categories, items, incomeSources, monthPurchases, accounts, cards, settings] = await Promise.all([
     listCategories(),
     listRecurringItems(),
     listIncomeSourcesWithVersions(),
     listPurchasesInRange(start, end),
-    listBudgets(),
     listAccounts(),
     listCards(),
     getSettings(),
@@ -78,9 +74,6 @@ export default async function RecurringBillsPage() {
       )
     : [];
 
-  // §6: monthly budgets, tracked against this calendar month's checking-sourced spend.
-  const budgetProgress = computeBudgetProgress(budgetRows, monthPurchases);
-
   // §8: "This month's expenses" + "Where it went" — same shared component/data as Dashboard and Sweep.
   const categoryByName = new Map(categories.map((c) => [c.name, c]));
   const transactions: TransactionLike[] = monthPurchases.map((p) => ({
@@ -111,7 +104,12 @@ export default async function RecurringBillsPage() {
   }
   const spendingByCategory = Array.from(byCategory.entries())
     .filter(([, amount]) => amount > 0)
-    .map(([name, amount]) => ({ name, amount, icon: categoryByName.get(name)?.emoji ?? DEFAULT_CATEGORY_ICON }))
+    .map(([name, amount]) => ({
+      name,
+      amount,
+      icon: categoryByName.get(name)?.emoji ?? DEFAULT_CATEGORY_ICON,
+      color: categoryByName.get(name)?.color ?? null,
+    }))
     .sort((a, b) => b.amount - a.amount);
 
   return (
@@ -164,22 +162,25 @@ export default async function RecurringBillsPage() {
                 Add tax
                 <Tooltip text="Applies your location's sales-tax rate (set in Settings) to the amount above." />
               </label>
-              <button type="submit" className={BTN_SOLID}>
-                Add a bill
-              </button>
+              <div className="mt-1 flex w-full justify-end">
+                <button type="submit" className={BTN_SOLID}>
+                  Add a bill
+                </button>
+              </div>
             </form>
           </AddButton>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {/* Rev 09 §1.2: Budget moved to its own Transactions sub-tab, so this
+          card no longer needs a grid-mate to match height against. */}
+      <div className="lg:max-w-xl">
         <PayPeriodToggle
           current={{ window: currentWindow, occurrences: currentPeriodOccurrences, emptyLabel: "Nothing due this period." }}
           next={{ window: nextWindow, occurrences: nextPeriodOccurrences, emptyLabel: "Nothing due next period." }}
           categoryById={categoryById}
           todayISO={todayISO}
         />
-        <BudgetTracker budgets={budgetProgress} categories={categories} />
       </div>
 
       <div className={CARD}>
@@ -273,7 +274,7 @@ export default async function RecurringBillsPage() {
         </div>
 
         <div className={CARD}>
-          <p className={CARD_HEADER}>Where it went</p>
+          <p className={CARD_HEADER}>Spend analysis</p>
           <div className="mt-3">
             {spendingByCategory.length === 0 ? (
               <p className="text-[13px] text-ink-3">Nothing spent yet this month.</p>

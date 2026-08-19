@@ -76,9 +76,11 @@ export function LogExpenseForm({
         />
       </label>
 
-      <button type="submit" className={BTN_SOLID}>
-        Log the expense
-      </button>
+      <div className="mt-1 flex w-full justify-end">
+        <button type="submit" className={BTN_SOLID}>
+          Log the expense
+        </button>
+      </div>
 
       {selected?.paymentSource === "rewards_card" ? (
         <p className="w-full text-[12.5px] text-ink-3">

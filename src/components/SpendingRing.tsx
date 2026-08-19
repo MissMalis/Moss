@@ -2,13 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import { computeRingLayout } from "@/lib/ring-layout";
-import { candyColorsForCategories } from "@/lib/candy-colors";
+import { candyColorForCategory } from "@/lib/candy-colors";
 import { formatCompactMoney, formatMoney } from "@/lib/format";
 
 export interface RingCategory {
   name: string;
   icon: string;
   amount: number;
+  /** Rev 09 §4: the category's own stored hex — the ring must match it exactly, not an arbitrary palette. Falls back to the candy palette only when a category has no color set. */
+  color?: string | null;
 }
 
 const SIZE = 240;
@@ -79,11 +81,15 @@ export function SpendingRing({ data }: { data: RingCategory[] }) {
   const segments = computeRingLayout(layoutValues, circumference);
   const total = data.reduce((s, d) => s + d.amount, 0);
 
-  // Ring colors are computed over whatever's currently in `display` (the
-  // full transitioning set, so a fading-out category keeps a sensible color
-  // through its last frames); the legend only ever shows the final set.
-  const ringColors = candyColorsForCategories(Object.keys(display));
-  const legendColors = candyColorsForCategories(data.map((d) => d.name));
+  // Rev 09 §4: the ring must match each category's own stored color
+  // exactly, not an arbitrary candy palette. `candyColorForCategory` is a
+  // pure function of the name alone, so a fading-out category (still in
+  // `display` mid-animation but no longer in `data`) still gets a stable
+  // fallback color without needing to remember it.
+  const colorMap = new Map(data.filter((d) => d.color).map((d) => [d.name, d.color as string]));
+  function colorFor(name: string): string {
+    return colorMap.get(name) ?? candyColorForCategory(name);
+  }
 
   return (
     // Rev 08 #13: ring and legend stack (never side-by-side) — sharing a
@@ -108,7 +114,7 @@ export function SpendingRing({ data }: { data: RingCategory[] }) {
             cy={cy}
             r={radius}
             fill="none"
-            stroke={ringColors.get(seg.name)}
+            stroke={colorFor(seg.name)}
             strokeWidth={STROKE}
             strokeLinecap="round"
             strokeDasharray={`${seg.length} ${circumference - seg.length}`}
@@ -152,7 +158,7 @@ export function SpendingRing({ data }: { data: RingCategory[] }) {
               <span
                 aria-hidden
                 className="h-2.5 w-2.5 shrink-0 rounded-full"
-                style={{ background: legendColors.get(d.name) }}
+                style={{ background: colorFor(d.name) }}
               />
               {d.name}
             </span>

@@ -84,9 +84,11 @@ export function AccountContributionSection({
                   />
                 </label>
               )}
-              <button type="submit" className={BTN_SOLID}>
-                Save
-              </button>
+              <div className="mt-1 flex w-full justify-end">
+                <button type="submit" className={BTN_SOLID}>
+                  Save
+                </button>
+              </div>
             </form>
           </AddButton>
         )}

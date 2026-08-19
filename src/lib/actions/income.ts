@@ -21,7 +21,7 @@ async function taxRateFor(supabase: Awaited<ReturnType<typeof createClient>>, us
 
 function revalidate() {
   revalidatePath("/today");
-  revalidatePath("/income");
+  revalidatePath("/expenses/income");
   revalidatePath("/net-worth");
 }
 

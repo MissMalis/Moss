@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { smoothAreaPath, smoothBandPath, smoothLinePath, type Point } from "@/lib/svg-path";
 import { formatMonthLabel, formatMoney, formatShortDateLabel } from "@/lib/format";
 import type { HistoryPoint } from "@/lib/net-worth";
@@ -10,39 +10,47 @@ interface Props {
   variant?: "spark" | "full";
 }
 
-function scale(points: HistoryPoint[], width: number, height: number, padLeft: number, padBottom: number) {
+function scale(points: HistoryPoint[], width: number, height: number, pad: { left: number; right: number; top: number; bottom: number }) {
   const maxVal = Math.max(1, ...points.map((p) => Math.max(p.contributed, p.marketValue)));
-  const innerW = width - padLeft;
-  const innerH = height - padBottom;
+  const innerW = width - pad.left - pad.right;
+  const innerH = height - pad.top - pad.bottom;
   const x = (i: number) =>
-    points.length <= 1 ? padLeft + innerW / 2 : padLeft + (i / (points.length - 1)) * innerW;
-  const y = (v: number) => innerH - (v / maxVal) * innerH;
-  return { x, y, maxVal, innerH };
+    points.length <= 1 ? pad.left + innerW / 2 : pad.left + (i / (points.length - 1)) * innerW;
+  const y = (v: number) => pad.top + innerH - (v / maxVal) * innerH;
+  return { x, y, maxVal, top: pad.top, bottom: pad.top + innerH };
+}
+
+/** One tick per distinct calendar month present — the last (most recent) point in each month, so ticks land evenly and the final month is never dropped. */
+function monthTickIndices(points: HistoryPoint[]): number[] {
+  const byMonth = new Map<string, number>();
+  points.forEach((p, i) => byMonth.set(p.date.slice(0, 7), i));
+  return Array.from(byMonth.values()).sort((a, b) => a - b);
 }
 
 const FALLBACK_WIDTH = 640;
 const HEIGHT = 220;
-const PAD_LEFT = 44;
-const PAD_BOTTOM = 24;
+// Rev 09 §2.1: explicit margins between the card's inner edge and the
+// plotted data — not edge to edge (that was an earlier over-correction).
+const PAD = { left: 24, right: 24, top: 16, bottom: 28 };
+const TOOLTIP_MARGIN = 8;
 
 /**
- * Rev 05 §1.11/Rev 08 #3: every graph fills its card and is hoverable — a
- * vertical guide + tooltip at the nearest point.
+ * Rev 05 §1.11/Rev 08 #3/Rev 09 §2: every graph fills its card and is
+ * hoverable — a vertical guide + tooltip at the nearest point, clamped so
+ * it never renders outside the container. One shared component for
+ * Dashboard and Net worth (both render this via NetWorthHero).
  *
  * The viewBox's width is measured from the actual container, not a fixed
- * constant — an earlier fix (`preserveAspectRatio="none"` with a 640-unit
- * viewBox stretched to a wider container) closed the "dead space on the
- * right" gap but scaled X and Y independently, which warps stroke widths,
- * circle radii, and text glyphs (SVG applies that same non-uniform
- * transform to every child, not just the path geometry). Matching the
- * viewBox to the real pixel width makes the scale factor 1:1 on both axes
- * — full width AND no distortion.
+ * constant, so the plot scales 1:1 on both axes regardless of card width
+ * (a non-uniform-scale approach here previously warped strokes/text).
  */
 export function NetWorthLines({ points, variant = "full" }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [measuredWidth, setMeasuredWidth] = useState(FALLBACK_WIDTH);
+  const [tooltipOffset, setTooltipOffset] = useState({ left: 0, flip: false });
 
   useEffect(() => {
     const el = containerRef.current;
@@ -54,6 +62,21 @@ export function NetWorthLines({ points, variant = "full" }: Props) {
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+
+  const pointXPx = (idx: number) => (idx / Math.max(1, points.length - 1)) * measuredWidth;
+
+  // Clamp the hover tooltip to the container's actual width, using its
+  // real measured size — not a fixed percentage guess — so it can never
+  // render partly off-screen regardless of card width or tooltip content.
+  useLayoutEffect(() => {
+    if (hoverIdx == null || !tooltipRef.current || !containerRef.current) return;
+    const containerWidth = containerRef.current.getBoundingClientRect().width;
+    const tooltipWidth = tooltipRef.current.offsetWidth;
+    const pointLeft = (pointXPx(hoverIdx) / measuredWidth) * containerWidth;
+    const fitsRight = pointLeft + TOOLTIP_MARGIN + tooltipWidth <= containerWidth;
+    setTooltipOffset({ left: pointLeft, flip: !fitsRight });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hoverIdx, measuredWidth, points.length]);
 
   if (points.length === 0) {
     return variant === "spark" ? (
@@ -70,7 +93,7 @@ export function NetWorthLines({ points, variant = "full" }: Props) {
   if (variant === "spark") {
     const width = 110;
     const height = 52;
-    const { x, y } = scale(points, width, height, 0, 0);
+    const { x, y } = scale(points, width, height, { left: 0, right: 0, top: 0, bottom: 0 });
     const marketPts: Point[] = points.map((p, i) => [x(i), y(p.marketValue)]);
     const contribPts: Point[] = points.map((p, i) => [x(i), y(p.contributed)]);
     return (
@@ -81,25 +104,13 @@ export function NetWorthLines({ points, variant = "full" }: Props) {
     );
   }
 
-  const { x, y, maxVal, innerH } = scale(points, measuredWidth, HEIGHT, PAD_LEFT, PAD_BOTTOM);
+  const { x, y, maxVal, top, bottom } = scale(points, measuredWidth, HEIGHT, PAD);
 
   const marketPts: Point[] = points.map((p, i) => [x(i), y(p.marketValue)]);
   const contribPts: Point[] = points.map((p, i) => [x(i), y(p.contributed)]);
-  const baselineY = innerH;
 
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round((maxVal * f) / 1000));
-
-  const labelCount = Math.min(6, points.length);
-  const rawLabelIdx = Array.from({ length: labelCount }, (_, i) =>
-    Math.round((i / Math.max(1, labelCount - 1)) * (points.length - 1)),
-  );
-  const seenMonths = new Set<string>();
-  const labelIdx = rawLabelIdx.filter((i) => {
-    const label = formatMonthLabel(points[i].date);
-    if (seenMonths.has(label)) return false;
-    seenMonths.add(label);
-    return true;
-  });
+  const yTicks = [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round((maxVal * f) / 1000));
+  const tickIdx = monthTickIndices(points);
 
   function handleMove(e: React.MouseEvent<SVGSVGElement>) {
     const svg = svgRef.current;
@@ -121,8 +132,6 @@ export function NetWorthLines({ points, variant = "full" }: Props) {
   }
 
   const hovered = hoverIdx != null ? points[hoverIdx] : null;
-  const tooltipLeft = hoverIdx != null ? (x(hoverIdx) / measuredWidth) * 100 : 0;
-  const flipTooltip = tooltipLeft > 65;
 
   return (
     <div ref={containerRef} className="relative w-full">
@@ -135,23 +144,19 @@ export function NetWorthLines({ points, variant = "full" }: Props) {
         onMouseMove={handleMove}
         onMouseLeave={() => setHoverIdx(null)}
       >
-        {ticks.map((t, i) => (
+        {yTicks.map((t, i) => (
           <text
             key={i}
-            x={0}
-            y={y(t * 1000) + 4}
-            style={{ fontSize: 11, fill: "var(--color-ink-3)", fontFamily: "var(--font-inter)" }}
+            x={PAD.left - 6}
+            y={y(t * 1000) + 3}
+            textAnchor="end"
+            style={{ fontSize: 10, fill: "var(--color-ink-3)", fontFamily: "var(--font-inter)" }}
           >
             ${t}k
           </text>
         ))}
 
-        <path
-          d={smoothAreaPath(contribPts, baselineY)}
-          fill="var(--color-contributed)"
-          opacity={0.1}
-          stroke="none"
-        />
+        <path d={smoothAreaPath(contribPts, bottom)} fill="var(--color-contributed)" opacity={0.1} stroke="none" />
         <path d={smoothBandPath(marketPts, contribPts)} fill="var(--color-good)" opacity={0.13} stroke="none" />
 
         <path
@@ -163,12 +168,12 @@ export function NetWorthLines({ points, variant = "full" }: Props) {
         />
         <path d={smoothLinePath(marketPts)} fill="none" stroke="var(--color-good)" strokeWidth={2} />
 
-        {labelIdx.map((i) => (
+        {tickIdx.map((i, n) => (
           <text
             key={i}
             x={x(i)}
-            y={HEIGHT - 4}
-            textAnchor="middle"
+            y={HEIGHT - 8}
+            textAnchor={n === 0 ? "start" : n === tickIdx.length - 1 ? "end" : "middle"}
             style={{ fontSize: 11, fill: "var(--color-ink-3)", fontFamily: "var(--font-inter)" }}
           >
             {formatMonthLabel(points[i].date)}
@@ -177,14 +182,7 @@ export function NetWorthLines({ points, variant = "full" }: Props) {
 
         {hoverIdx != null && (
           <>
-            <line
-              x1={x(hoverIdx)}
-              x2={x(hoverIdx)}
-              y1={0}
-              y2={innerH}
-              stroke="var(--color-border-strong)"
-              strokeWidth={1}
-            />
+            <line x1={x(hoverIdx)} x2={x(hoverIdx)} y1={top} y2={bottom} stroke="var(--color-border-strong)" strokeWidth={1} />
             <circle cx={x(hoverIdx)} cy={y(points[hoverIdx].marketValue)} r={3.5} fill="var(--color-good)" />
             <circle cx={x(hoverIdx)} cy={y(points[hoverIdx].contributed)} r={3.5} fill="var(--color-contributed)" />
           </>
@@ -193,10 +191,11 @@ export function NetWorthLines({ points, variant = "full" }: Props) {
 
       {hovered && (
         <div
+          ref={tooltipRef}
           className="pointer-events-none absolute top-0 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[12px] shadow-lg"
           style={{
-            left: `${tooltipLeft}%`,
-            transform: flipTooltip ? "translateX(-100%)" : "translateX(8px)",
+            left: tooltipOffset.left,
+            transform: tooltipOffset.flip ? `translateX(calc(-100% - ${TOOLTIP_MARGIN}px))` : `translateX(${TOOLTIP_MARGIN}px)`,
           }}
         >
           <p className="text-ink-3">{formatShortDateLabel(hovered.date)}</p>
@@ -208,6 +207,18 @@ export function NetWorthLines({ points, variant = "full" }: Props) {
           </p>
         </div>
       )}
+
+      {/* Rev 09 §2.3: the ONLY legend — centered beneath the plot. */}
+      <div className="mt-1 flex items-center justify-center gap-4 text-[12px] text-ink-3">
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-1.5 w-3 rounded-full bg-good" aria-hidden />
+          Market value
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-0 w-3 border-t-2 border-dashed border-contributed" aria-hidden />
+          Contribution
+        </span>
+      </div>
     </div>
   );
 }

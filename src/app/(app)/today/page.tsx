@@ -19,14 +19,8 @@ import { AlertsCard } from "@/components/AlertsCard";
 import { RecentList } from "@/components/RecentList";
 import { UpcomingStrip } from "@/components/UpcomingStrip";
 import { CurrentPeriodCard } from "@/components/CurrentPeriodCard";
+import { Greeting } from "@/components/Greeting";
 import { BTN_MOSS, BTN_SOLID, CARD, CARD_HEADER, LINK_QUIET, PILL_HOLD, SCROLL_LIST } from "@/lib/ui";
-
-function greeting() {
-  const hour = new Date().getHours();
-  if (hour < 12) return "Good morning";
-  if (hour < 18) return "Good afternoon";
-  return "Good evening";
-}
 
 export default async function TodayPage() {
   const todayISO = new Date().toISOString().slice(0, 10);
@@ -91,11 +85,15 @@ export default async function TodayPage() {
       <TickerBar indices={indices} />
 
       <div>
-        <p className="text-[26px] font-medium leading-tight text-ink">{greeting()}</p>
+        <p className="text-[26px] font-medium leading-tight text-ink">
+          <Greeting />
+        </p>
         <p className="mt-0.5 text-[15px] text-ink-2">{formatDateRange(window.start, window.end)}</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.6fr_1fr]">
+      {/* Rev 09 §5.1: Alerts ~30% narrower than the Rev 08 ratio, graph
+          widens to fill the freed space. */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2.7fr_1fr]">
         <NetWorthHero total={netWorth.total} points={historyPoints} />
         <AlertsCard items={reviewItems} />
       </div>
@@ -164,7 +162,7 @@ export default async function TodayPage() {
               <span className="text-ink tabular-nums">{formatMoney(rollover)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-ink-2">− Earmarked bills</span>
+              <span className="text-ink-2">− Earmarked</span>
               <span className="text-ink tabular-nums">{formatMoney(earmarked)}</span>
             </div>
             <div className="flex justify-between">

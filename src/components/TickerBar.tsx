@@ -1,10 +1,12 @@
 import { formatMoney } from "@/lib/format";
+import { TickerUpdatedAt } from "@/components/TickerUpdatedAt";
 
 export interface TickerIndex {
   symbol: string;
   label: string;
   value: number;
   prev_close: number;
+  updated_at: string;
 }
 
 function formatValue(idx: TickerIndex): string {
@@ -24,23 +26,33 @@ function formatValue(idx: TickerIndex): string {
 export function TickerBar({ indices }: { indices: TickerIndex[] }) {
   if (indices.length === 0) return null;
 
+  // Rev 09 §5.3.2: a small muted "Updated H:MM" at the right end — the
+  // most recent write across all rows, so it's honest about staleness
+  // even though nothing refreshes these live yet (see market-indices.ts).
+  const latestUpdate = indices.reduce((max, idx) => (idx.updated_at > max ? idx.updated_at : max), indices[0].updated_at);
+
   return (
     <div className="relative left-1/2 -mt-8 -ml-[50vw] w-screen bg-ink">
-      <div className="mx-auto flex h-10 max-w-[1440px] items-center justify-evenly px-6 md:px-10">
-        {indices.map((idx) => {
-          const delta = idx.value - idx.prev_close;
-          const pct = idx.prev_close !== 0 ? (delta / idx.prev_close) * 100 : 0;
-          const up = delta >= 0;
-          return (
-            <div key={idx.symbol} className="flex items-center gap-2 text-[12px]">
-              <span className="text-bg/60">{idx.label}</span>
-              <span className="text-bg tabular-nums">{formatValue(idx)}</span>
-              <span className={`tabular-nums ${up ? "text-good" : "text-bad"}`}>
-                {up ? "▲" : "▼"} {Math.abs(pct).toFixed(2)}%
-              </span>
-            </div>
-          );
-        })}
+      <div className="mx-auto flex h-10 max-w-[1440px] items-center gap-4 px-6 md:px-10">
+        <div className="flex flex-1 items-center justify-evenly">
+          {indices.map((idx) => {
+            const delta = idx.value - idx.prev_close;
+            const pct = idx.prev_close !== 0 ? (delta / idx.prev_close) * 100 : 0;
+            const up = delta >= 0;
+            return (
+              <div key={idx.symbol} className="flex items-center gap-2 text-[12px]">
+                <span className="text-bg/60">{idx.label}</span>
+                <span className="text-bg tabular-nums">{formatValue(idx)}</span>
+                <span className={`tabular-nums ${up ? "text-good" : "text-bad"}`}>
+                  {up ? "▲" : "▼"} {Math.abs(pct).toFixed(2)}%
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="shrink-0 text-[11px]">
+          <TickerUpdatedAt isoTimestamp={latestUpdate} />
+        </div>
       </div>
     </div>
   );

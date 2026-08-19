@@ -14,6 +14,7 @@ type LiabilityAccountRow = {
   name: string;
   type: string;
   icon: string | null;
+  institution: string | null;
   apr_pct: number | null;
   last4: string | null;
   loan_term_months: number | null;
@@ -46,6 +47,7 @@ export function LiabilityDetailsSection({ account }: { account: LiabilityAccount
         </div>
         <div className="mt-2">
           <Row label="Type" value={accountTypeLabel(account.type)} />
+          <Row label="Institution" value={account.institution} />
           <Row label="As of" value={account.balance_updated_at ? formatShortDateLabel(account.balance_updated_at.slice(0, 10)) : null} />
           {cfg.showsCreditCardLast4 && <Row label="Card" value={formatLast4(account.last4)} />}
           {cfg.showsTerm && <Row label="Term" value={account.loan_term_months ? `${Math.round(account.loan_term_months / 12)} years` : null} />}
@@ -68,6 +70,10 @@ export function LiabilityDetailsSection({ account }: { account: LiabilityAccount
           <label className={LABEL}>
             Name
             <input name="name" defaultValue={account.name} className={INPUT} />
+          </label>
+          <label className={LABEL}>
+            Institution
+            <input name="institution" defaultValue={account.institution ?? ""} placeholder="TD Bank" className={`w-40 ${INPUT}`} />
           </label>
           <label className={LABEL}>
             As of

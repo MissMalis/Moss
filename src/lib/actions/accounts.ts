@@ -86,6 +86,7 @@ export async function createAccount(formData: FormData): Promise<{ id: string }>
   const annual_contribution_limit = numOrNull(formData, "annual_contribution_limit");
   const min_cash = numOrNull(formData, "min_cash");
   const icon = String(formData.get("icon") ?? "").trim() || null;
+  const institution = String(formData.get("institution") ?? "").trim() || null;
   const last4 = String(formData.get("last4") ?? "").trim() || null;
   const debit_card_last4 = String(formData.get("debit_card_last4") ?? "").trim() || null;
   const debit_card_network = String(formData.get("debit_card_network") ?? "").trim() || null;
@@ -112,6 +113,7 @@ export async function createAccount(formData: FormData): Promise<{ id: string }>
       annual_contribution_limit,
       min_cash,
       icon,
+      institution,
       last4,
       debit_card_last4,
       debit_card_network,
@@ -165,6 +167,7 @@ export async function createAccount(formData: FormData): Promise<{ id: string }>
   }
 
   revalidatePath("/net-worth");
+  revalidatePath("/sweep");
   return { id: account.id };
 }
 
@@ -182,6 +185,7 @@ export async function createLiabilityAccount(formData: FormData): Promise<{ id: 
   const balance = Number(formData.get("balance") ?? 0);
   const apr_pct = numOrNull(formData, "apr_pct");
   const icon = String(formData.get("icon") ?? "").trim() || null;
+  const institution = String(formData.get("institution") ?? "").trim() || null;
   const termYears = numOrNull(formData, "term_years");
   const loan_term_months = termYears != null ? Math.round(termYears * 12) : null;
   const notes = String(formData.get("notes") ?? "").trim() || null;
@@ -192,7 +196,7 @@ export async function createLiabilityAccount(formData: FormData): Promise<{ id: 
 
   const { data: account, error } = await supabase
     .from("accounts")
-    .insert({ user_id: user.id, name, type, balance, apr_pct, icon, loan_term_months, notes, balance_updated_at, system_key })
+    .insert({ user_id: user.id, name, type, balance, apr_pct, icon, institution, loan_term_months, notes, balance_updated_at, system_key })
     .select("id")
     .single();
   if (error) throw error;
@@ -214,6 +218,7 @@ export async function createLiabilityAccount(formData: FormData): Promise<{ id: 
   }
 
   revalidatePath("/net-worth");
+  revalidatePath("/sweep");
   return { id: account.id };
 }
 
@@ -223,6 +228,7 @@ export async function updateAccount(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const type = String(formData.get("type") ?? "");
   const icon = String(formData.get("icon") ?? "").trim() || null;
+  const institution = String(formData.get("institution") ?? "").trim() || null;
   const as_ofRaw = String(formData.get("as_of") ?? "");
   const balance_updated_at = as_ofRaw ? new Date(as_ofRaw + "T00:00:00").toISOString() : new Date().toISOString();
   if (!id || !name || !type) throw new Error("Name and type are required");
@@ -236,10 +242,11 @@ export async function updateAccount(formData: FormData) {
     const notes = String(formData.get("notes") ?? "").trim() || null;
     const { error } = await supabase
       .from("accounts")
-      .update({ name, type, icon, apr_pct, last4, loan_term_months, notes, balance_updated_at })
+      .update({ name, type, icon, institution, apr_pct, last4, loan_term_months, notes, balance_updated_at })
       .eq("id", id);
     if (error) throw error;
     revalidatePath("/net-worth");
+    revalidatePath("/sweep");
     return;
   }
 
@@ -270,6 +277,7 @@ export async function updateAccount(formData: FormData) {
       annual_contribution_limit,
       min_cash,
       icon,
+      institution,
       last4,
       debit_card_last4,
       debit_card_network,
@@ -283,6 +291,7 @@ export async function updateAccount(formData: FormData) {
     .eq("id", id);
   if (error) throw error;
   revalidatePath("/net-worth");
+  revalidatePath("/sweep");
 }
 
 export async function deleteAccount(formData: FormData) {
@@ -293,4 +302,5 @@ export async function deleteAccount(formData: FormData) {
   const { error } = await supabase.from("accounts").delete().eq("id", id);
   if (error) throw error;
   revalidatePath("/net-worth");
+  revalidatePath("/sweep");
 }

@@ -2,7 +2,7 @@ import { createLiabilityLoan, updateLiabilityLoan, deleteLiabilityLoan } from "@
 import { blendedApr } from "@/lib/net-worth";
 import { formatMoney } from "@/lib/format";
 import { AddButton } from "@/components/AddButton";
-import { LINK_QUIET, CARD, CARD_HEADER, INPUT } from "@/lib/ui";
+import { LINK_QUIET, BTN_SOLID, CARD, CARD_HEADER, INPUT } from "@/lib/ui";
 
 interface LoanRow {
   id: string;
@@ -93,9 +93,11 @@ export function LiabilityLoansSection({ accountId, loans }: { accountId: string;
               APR %
               <input type="number" step="0.01" name="apr_pct" className={`w-20 ${INPUT}`} />
             </label>
-            <button type="submit" className={LINK_QUIET}>
-              Add
-            </button>
+            <div className="mt-1 flex w-full justify-end">
+              <button type="submit" className={BTN_SOLID}>
+                Add
+              </button>
+            </div>
           </form>
         </AddButton>
       </div>

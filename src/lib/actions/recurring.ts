@@ -31,9 +31,10 @@ export async function createCategory(formData: FormData) {
   const { supabase, user } = await requireUser();
   const name = String(formData.get("name") ?? "").trim();
   const emoji = String(formData.get("emoji") ?? "").trim() || null;
+  const color = String(formData.get("color") ?? "").trim() || null;
   if (!name) throw new Error("Name is required");
 
-  const { error } = await supabase.from("categories").insert({ user_id: user.id, name, emoji });
+  const { error } = await supabase.from("categories").insert({ user_id: user.id, name, emoji, color });
   if (error) throw error;
   revalidate();
 }
@@ -43,16 +44,41 @@ export async function updateCategory(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const emoji = String(formData.get("emoji") ?? "").trim() || null;
+  const color = String(formData.get("color") ?? "").trim() || null;
   if (!id || !name) throw new Error("Name is required");
 
-  const { error } = await supabase.from("categories").update({ name, emoji }).eq("id", id);
+  const { error } = await supabase.from("categories").update({ name, emoji, color }).eq("id", id);
   if (error) throw error;
   revalidate();
 }
 
+// Rev 09 §0.2/§0.3: a category can't be silently dropped if a budget is
+// still keyed to its name (budgets.category is plain text, no FK — the
+// schema can't block this for us) — surface a clear, labeled message
+// instead of letting a delete throw. Bills/charges that reference this
+// category by id fall back to "no category" via ON DELETE SET NULL, not
+// an error (schema.sql, Rev 09 section).
 export async function deleteCategory(formData: FormData) {
-  const { supabase } = await requireUser();
+  const { supabase, user } = await requireUser();
   const id = String(formData.get("id") ?? "");
+
+  const { data: category, error: lookupErr } = await supabase
+    .from("categories")
+    .select("name")
+    .eq("id", id)
+    .single();
+  if (lookupErr) throw lookupErr;
+
+  const { data: lockingBudget } = await supabase
+    .from("budgets")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("category", category.name)
+    .maybeSingle();
+  if (lockingBudget) {
+    throw new Error("This category is used by a budget. Delete the budget first.");
+  }
+
   const { error } = await supabase.from("categories").delete().eq("id", id);
   if (error) throw error;
   revalidate();

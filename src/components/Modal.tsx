@@ -12,7 +12,6 @@ export function Modal({
   title,
   trigger,
   children,
-  wide = false,
 }: {
   /** Simple case: a button with this text opens the modal. */
   label?: string;
@@ -20,8 +19,6 @@ export function Modal({
   /** Advanced case: render your own trigger, given an `open` callback. */
   trigger?: (open: () => void) => React.ReactNode;
   children: React.ReactNode;
-  /** Rev 08 #11.6: the Add-budget modal specifically needed more room — opt-in per call site, default width is unchanged everywhere else. */
-  wide?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -41,7 +38,8 @@ export function Modal({
           onClick={() => setOpen(false)}
         >
           <div
-            className={`max-h-[85vh] w-full overflow-y-auto rounded-xl border border-border bg-card p-5 shadow-lg ${wide ? "max-w-2xl" : "max-w-lg"}`}
+            /* Rev 09 §8: one standard modal size everywhere — no more per-call-site `wide` opt-out. */
+            className="max-h-[85vh] w-full max-w-[480px] overflow-y-auto rounded-xl border border-border bg-card p-5 shadow-lg"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between">

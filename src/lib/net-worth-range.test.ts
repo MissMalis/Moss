@@ -28,21 +28,24 @@ describe("filterByRange", () => {
 });
 
 describe("computeDeltas", () => {
-  it("all-time % is growth over total contributed, independent of range", () => {
-    const delta = computeDeltas(twelveMonths, filterByRange(twelveMonths, "3M"))!;
-    const last = twelveMonths[11];
-    const expectedPct = ((last.marketValue - last.contributed) / last.contributed) * 100;
-    expect(delta.allTimePct).toBeCloseTo(expectedPct, 5);
-  });
-
   it("range delta is the market-value move within just the selected range", () => {
     const range = filterByRange(twelveMonths, "3M");
     const delta = computeDeltas(twelveMonths, range)!;
     expect(delta.rangeAbs).toBe(range[range.length - 1].marketValue - range[0].marketValue);
-    expect(delta.rangeDate).toBe(range[range.length - 1].date);
+  });
+
+  it("range % is the move as a fraction of the range's starting value", () => {
+    const range = filterByRange(twelveMonths, "3M");
+    const delta = computeDeltas(twelveMonths, range)!;
+    const expectedPct = ((range[range.length - 1].marketValue - range[0].marketValue) / range[0].marketValue) * 100;
+    expect(delta.rangePct).toBeCloseTo(expectedPct, 5);
   });
 
   it("returns null when there's no history at all", () => {
     expect(computeDeltas([], [])).toBeNull();
+  });
+
+  it("returns null when the range itself is empty (even with history overall)", () => {
+    expect(computeDeltas(twelveMonths, [])).toBeNull();
   });
 });

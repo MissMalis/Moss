@@ -44,6 +44,7 @@ export default async function HistoryPage({
   const selected = periods.find((p) => p.pay_date === period) ?? periods[0];
   const snapshot = selected.snapshot as unknown as Snapshot | null;
   const iconByCategory = new Map(categories.map((c) => [c.name, c.emoji ?? DEFAULT_CATEGORY_ICON]));
+  const colorByCategory = new Map(categories.map((c) => [c.name, c.color]));
 
   const byCategory = new Map<string, number>();
   for (const e of snapshot?.earmarked ?? []) {
@@ -55,7 +56,12 @@ export default async function HistoryPage({
   }
   const spendingByCategory: RingCategory[] = Array.from(byCategory.entries())
     .filter(([, amount]) => amount > 0)
-    .map(([name, amount]) => ({ name, amount, icon: iconByCategory.get(name) ?? DEFAULT_CATEGORY_ICON }))
+    .map(([name, amount]) => ({
+      name,
+      amount,
+      icon: iconByCategory.get(name) ?? DEFAULT_CATEGORY_ICON,
+      color: colorByCategory.get(name) ?? null,
+    }))
     .sort((a, b) => b.amount - a.amount);
 
   return (
@@ -104,7 +110,7 @@ export default async function HistoryPage({
 
       {spendingByCategory.length > 0 && (
         <section>
-          <h2 className="mb-3 font-display text-[18px] font-medium text-ink">Where it went</h2>
+          <h2 className="mb-3 font-display text-[18px] font-medium text-ink">Spend analysis</h2>
           <SpendingRing data={spendingByCategory} />
         </section>
       )}

@@ -24,11 +24,12 @@ interface IncomeSourceOption {
   freq: string;
 }
 
-function Modal({ title, onClose, children, wide = false }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
+function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 p-4" onClick={onClose}>
       <div
-        className={`max-h-[85vh] w-full overflow-y-auto rounded-xl border border-border bg-card p-5 shadow-lg ${wide ? "max-w-2xl" : "max-w-sm"}`}
+        /* Rev 09 §8: one standard modal size everywhere — matches @/components/Modal's width. */
+        className="max-h-[85vh] w-full max-w-[480px] overflow-y-auto rounded-xl border border-border bg-card p-5 shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-center justify-between">
@@ -82,13 +83,13 @@ export function AddAssetButton({ incomeSources }: { incomeSources: IncomeSourceO
       </button>
 
       {step === "type" && (
-        <Modal title="What kind of account?" onClose={close} wide>
+        <Modal title="What kind of account?" onClose={close}>
           <TypeGrid types={ASSET_TYPES} onPick={(t) => { setType(t); setStep("details"); }} />
         </Modal>
       )}
 
       {step === "details" && type && (
-        <Modal title={accountTypeLabel(type)} onClose={close} wide>
+        <Modal title={accountTypeLabel(type)} onClose={close}>
           <AssetDetailsForm type={type} incomeSources={incomeSources} onBack={() => setStep("type")} onDone={onDone} />
         </Modal>
       )}
@@ -118,13 +119,13 @@ export function AddLiabilityButton() {
       </button>
 
       {step === "type" && (
-        <Modal title="What kind of debt?" onClose={close} wide>
+        <Modal title="What kind of debt?" onClose={close}>
           <TypeGrid types={LIABILITY_TYPES} onPick={(t) => { setType(t); setStep("details"); }} />
         </Modal>
       )}
 
       {step === "details" && type && (
-        <Modal title={accountTypeLabel(type)} onClose={close} wide>
+        <Modal title={accountTypeLabel(type)} onClose={close}>
           <LiabilityDetailsForm type={type} onBack={() => setStep("type")} onDone={onDone} />
         </Modal>
       )}
@@ -191,6 +192,10 @@ function AssetDetailsForm({
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
+        <label className={LABEL}>
+          Institution
+          <input name="institution" placeholder="TD Bank" className={`w-40 ${INPUT}`} />
+        </label>
         {showsBalance && !cfg.isHoldingsToggle && (
           <label className={LABEL}>
             {cfg.alwaysBothCashAndHoldings ? "Cash sleeve" : "Balance"}
@@ -425,6 +430,10 @@ function LiabilityDetailsForm({
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
+        <label className={LABEL}>
+          Institution
+          <input name="institution" placeholder="TD Bank" className={`w-40 ${INPUT}`} />
+        </label>
         <label className={LABEL}>
           Balance
           <input type="number" step="0.01" name="balance" defaultValue={0} className={`w-28 ${INPUT}`} />

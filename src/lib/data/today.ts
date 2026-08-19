@@ -1,5 +1,6 @@
 import { safeToSpend, type PayWindow } from "@/lib/periods";
 import { buildOccurrencesForWindow, sumEarmarked } from "@/lib/recurring";
+import { computeBudgetEarmark, spentByCategory } from "@/lib/budgets";
 import {
   computeAutoReserve,
   findCurrentWindow,
@@ -16,6 +17,7 @@ import {
   listIncomeAmountVersions,
 } from "@/lib/data/income";
 import { listRecurringItems, listOccurrencesInRange, listCategories } from "@/lib/data/recurring";
+import { listBudgets } from "@/lib/data/budgets";
 import { closeElapsedPeriods } from "@/lib/data/close-periods";
 import { listAccounts, listHoldings } from "@/lib/data/accounts";
 import { listAllSnapshots } from "@/lib/data/net-worth-snapshots";
@@ -25,6 +27,13 @@ import { transfersSafeToSpendImpact } from "@/lib/transfers";
 import { reconciliationStatus } from "@/lib/cards";
 import { buildReviewChecklist, type ReviewItem } from "@/lib/checklist";
 import { lucideKey } from "@/lib/icons";
+
+function currentMonthRange(todayISO: string): { start: string; end: string } {
+  const d = new Date(todayISO + "T00:00:00");
+  const start = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+  const end = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().slice(0, 10);
+  return { start, end };
+}
 
 const CHECKLIST_LOOKBACK_DAYS = 45;
 
@@ -187,28 +196,54 @@ export async function getTodaySnapshot(): Promise<TodaySnapshot> {
   const futureWindows = windows.filter((w) => w.payDate > window.payDate).slice(0, 2);
   const scanEnd = futureWindows.at(-1)?.end ?? window.end;
 
-  const [occurrenceRows, purchasesInWindow, purchasesInPrevious, posted, categories, previousClosed, accounts, transfersInWindow, transfersInPrevious] =
-    await Promise.all([
-      listOccurrencesInRange(scanStart, scanEnd),
-      listPurchasesInRange(window.start, window.end),
-      previousWindow
-        ? listPurchasesInRange(previousWindow.start, previousWindow.end)
-        : Promise.resolve([]),
-      findPostedPayPeriod(primarySource.id, window.payDate),
-      listCategories(),
-      previousWindow
-        ? findPostedPayPeriod(primarySource.id, previousWindow.payDate)
-        : Promise.resolve(null),
-      listAccounts(),
-      listTransfersInRange(window.start, window.end),
-      previousWindow
-        ? listTransfersInRange(previousWindow.start, previousWindow.end)
-        : Promise.resolve([]),
-    ]);
+  const monthRange = currentMonthRange(todayISO);
+
+  const [
+    occurrenceRows,
+    purchasesInWindow,
+    purchasesInPrevious,
+    posted,
+    categories,
+    previousClosed,
+    accounts,
+    transfersInWindow,
+    transfersInPrevious,
+    budgets,
+    monthPurchases,
+  ] = await Promise.all([
+    listOccurrencesInRange(scanStart, scanEnd),
+    listPurchasesInRange(window.start, window.end),
+    previousWindow
+      ? listPurchasesInRange(previousWindow.start, previousWindow.end)
+      : Promise.resolve([]),
+    findPostedPayPeriod(primarySource.id, window.payDate),
+    listCategories(),
+    previousWindow
+      ? findPostedPayPeriod(primarySource.id, previousWindow.payDate)
+      : Promise.resolve(null),
+    listAccounts(),
+    listTransfersInRange(window.start, window.end),
+    previousWindow
+      ? listTransfersInRange(previousWindow.start, previousWindow.end)
+      : Promise.resolve([]),
+    listBudgets(),
+    listPurchasesInRange(monthRange.start, monthRange.end),
+  ]);
 
   const occurrenceState = new Map(
     occurrenceRows.map((o) => [`${o.recurring_item_id}|${o.occ_date}`, o]),
   );
+
+  // Rev 09 §3.1: "consume-the-earmark" — a budget's full cap commits once,
+  // on the 1st (like any other monthly bill), and purchases in that
+  // category draw down the SAME earmark rather than hitting Safe to Spend
+  // a second time — so budget-category purchases are excluded from every
+  // window's raw purchasesTotal below, in favor of computeBudgetEarmark's
+  // max(cap, monthSpend) term (which only actually adds anything in the
+  // one window containing the 1st).
+  const budgetedCategories = new Set(budgets.map((b) => b.category));
+  const monthSpend = spentByCategory(monthPurchases);
+  const notBudgeted = (p: { category: string }) => !budgetedCategories.has(p.category);
 
   const earmarkedItems = buildOccurrencesForWindow(
     recurringItems,
@@ -216,7 +251,8 @@ export async function getTodaySnapshot(): Promise<TodaySnapshot> {
     window.start,
     window.end,
   );
-  const earmarked = sumEarmarked(earmarkedItems);
+  const budgetEarmarked = computeBudgetEarmark(budgets, monthSpend, window.start, window.end);
+  const earmarked = sumEarmarked(earmarkedItems) + budgetEarmarked;
   const income = netIncomeForWindow(incomeSources, deductions, window, todayISO);
   // Only checking-sourced spending draws down Safe-to-Spend (brief rev 02 §3)
   // — investing/stored-value spends come out of that account's own balance
@@ -228,8 +264,9 @@ export async function getTodaySnapshot(): Promise<TodaySnapshot> {
   // exactly like a checking-sourced expense would, without ever leaking
   // into spend reports/budgets/the ring, which only ever read `purchases`.
   const purchasesTotal =
-    purchasesInWindow.filter((p) => p.payment_source === "checking").reduce((s, p) => s + p.amount, 0) +
-    transfersSafeToSpendImpact(transfersInWindow, accounts);
+    purchasesInWindow
+      .filter((p) => p.payment_source === "checking" && notBudgeted(p))
+      .reduce((s, p) => s + p.amount, 0) + transfersSafeToSpendImpact(transfersInWindow, accounts);
 
   // Rollover prefers the frozen value from a closed previous period (the
   // period-close job runs above); only falls back to a live, one-step-back
@@ -238,13 +275,14 @@ export async function getTodaySnapshot(): Promise<TodaySnapshot> {
   if (previousClosed?.closed && previousClosed.safe_to_spend != null) {
     rollover = Math.max(0, previousClosed.safe_to_spend);
   } else if (previousWindow) {
-    const prevEarmarked = sumEarmarked(
-      buildOccurrencesForWindow(recurringItems, occurrenceState, previousWindow.start, previousWindow.end),
-    );
+    const prevEarmarked =
+      sumEarmarked(buildOccurrencesForWindow(recurringItems, occurrenceState, previousWindow.start, previousWindow.end)) +
+      computeBudgetEarmark(budgets, monthSpend, previousWindow.start, previousWindow.end);
     const prevIncome = netIncomeForWindow(incomeSources, deductions, previousWindow, todayISO);
     const prevPurchasesTotal =
-      purchasesInPrevious.filter((p) => p.payment_source === "checking").reduce((s, p) => s + p.amount, 0) +
-      transfersSafeToSpendImpact(transfersInPrevious, accounts);
+      purchasesInPrevious
+        .filter((p) => p.payment_source === "checking" && notBudgeted(p))
+        .reduce((s, p) => s + p.amount, 0) + transfersSafeToSpendImpact(transfersInPrevious, accounts);
     const prevSTS = safeToSpend({
       income: prevIncome,
       rollover: 0,

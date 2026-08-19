@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { Tooltip } from "@/components/Tooltip";
 import { BufferChannelControl } from "@/components/BufferChannelControl";
 import { PayOffCardForm } from "@/components/PayOffCardForm";
+import { Wallet, type WalletEntry } from "@/components/Wallet";
 import { lucideKey } from "@/lib/icons";
 import { groupByDate, type TransactionLike } from "@/lib/recent-transactions";
 import { BTN_MOSS, CARD, CARD_HEADER, ROW, SCROLL_LIST } from "@/lib/ui";
@@ -71,6 +72,21 @@ export default async function SweepPage() {
     }));
   const rewardsGroups = groupByDate(rewardsTransactions);
 
+  // Rev 09 §7: the Wallet — one entry per spendable/payable account, same
+  // single-source-of-truth `accounts` rows Net worth reads, so an edit
+  // there shows up here on next navigation without a manual sync step.
+  const walletEntries: WalletEntry[] = [...cashAccounts, ...liabilityAccounts]
+    .map((a) => ({
+      id: a.id,
+      name: a.name,
+      type: a.type,
+      icon: a.icon,
+      institution: a.institution,
+      last4: a.last4,
+      balance: a.balance,
+      isChannel: channelingCard?.account_id === a.id,
+    }));
+
   return (
     <div className="space-y-6">
       <div>
@@ -91,14 +107,20 @@ export default async function SweepPage() {
         cards={cards}
       />
 
-      <div className={CARD}>
-        <p className={CARD_HEADER}>Rewards-card charges</p>
-        <div className={`mt-3 ${SCROLL_LIST}`}>
-          {rewardsGroups.length === 0 ? (
-            <p className="text-[13px] text-ink-3">Nothing logged yet.</p>
-          ) : (
-            <RecentList groups={rewardsGroups} />
-          )}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className={CARD}>
+          <Wallet entries={walletEntries} />
+        </div>
+
+        <div className={CARD}>
+          <p className={CARD_HEADER}>Rewards-card charges</p>
+          <div className={`mt-3 ${SCROLL_LIST}`}>
+            {rewardsGroups.length === 0 ? (
+              <p className="text-[13px] text-ink-3">Nothing logged yet.</p>
+            ) : (
+              <RecentList groups={rewardsGroups} />
+            )}
+          </div>
         </div>
       </div>
 

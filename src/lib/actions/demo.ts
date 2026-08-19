@@ -17,7 +17,7 @@ async function requireUser() {
 }
 
 function revalidateEverything() {
-  for (const path of ["/today", "/net-worth", "/expenses", "/income", "/sweep", "/history", "/settings"]) {
+  for (const path of ["/today", "/net-worth", "/expenses", "/expenses/income", "/expenses/budget", "/sweep", "/history", "/settings"]) {
     revalidatePath(path);
   }
 }
@@ -141,10 +141,10 @@ async function writeDemoDataset(supabase: Client, userId: string) {
 
   // ---- Accounts ----
   const accountsToInsert = [
-    { name: "Checking", type: "Checking", balance: 3200, last4: "4821" },
-    { name: "HYSA", type: "HYSA", balance: 11500, apy_pct: 4.25, last4: "7743" },
-    { name: "Buffer", type: "Checking", balance: 95, is_forbidden_money: true, icon: lucideKey("wallet") },
-    { name: "Transit card", type: "Stored-value", balance: 8, icon: lucideKey("train"), last4: "3390" },
+    { name: "Checking", type: "Checking", balance: 3200, institution: "TD Bank", last4: "4821" },
+    { name: "HYSA", type: "HYSA", balance: 11500, apy_pct: 4.25, institution: "Marcus", last4: "7743" },
+    { name: "Buffer", type: "Checking", balance: 95, is_forbidden_money: true, icon: lucideKey("wallet"), institution: "TD Bank" },
+    { name: "Transit card", type: "Stored-value", balance: 8, icon: lucideKey("train"), institution: "MTA", last4: "3390" },
     {
       name: "HSA",
       type: "HSA",
@@ -154,6 +154,7 @@ async function writeDemoDataset(supabase: Client, userId: string) {
       system_key: "hsa",
       annual_contribution_limit: 4300,
       balance_updated_at: today.toISOString(),
+      institution: "Fidelity",
       debit_card_last4: "6612",
     },
     {
@@ -168,6 +169,7 @@ async function writeDemoDataset(supabase: Client, userId: string) {
       match_tier2_rate_pct: 50,
       match_tier2_limit_pct: 5,
       balance_updated_at: daysAgo(today, 35).toISOString(),
+      institution: "Fidelity",
     },
     {
       name: "Roth IRA",
@@ -176,13 +178,14 @@ async function writeDemoDataset(supabase: Client, userId: string) {
       is_system: true,
       system_key: "roth_ira",
       balance_updated_at: today.toISOString(),
+      institution: "Vanguard",
     },
-    { name: "Taxable Brokerage", type: "Taxable Brokerage", balance: 0, last4: "9058" },
+    { name: "Taxable Brokerage", type: "Taxable Brokerage", balance: 0, institution: "Vanguard", last4: "9058" },
     // last4 matches the linked Amex Gold card below, so the account
     // header and the card both show the same number.
-    { name: "Credit card", type: "Credit card", balance: 2400, apr_pct: 22.9, last4: "1005" },
-    { name: "Car loan", type: "Auto loan", balance: 9800, apr_pct: 6.4, loan_term_months: 60 },
-    { name: "Student loans", type: "Student loans", balance: 14500, apr_pct: 5.2 },
+    { name: "Credit card", type: "Credit card", balance: 2400, apr_pct: 22.9, institution: "American Express", last4: "1005" },
+    { name: "Car loan", type: "Auto loan", balance: 9800, apr_pct: 6.4, loan_term_months: 60, institution: "Toyota Financial" },
+    { name: "Student loans", type: "Student loans", balance: 14500, apr_pct: 5.2, institution: "Navient" },
   ] as const;
 
   const { data: accounts, error: acctErr } = await supabase
@@ -284,9 +287,14 @@ async function writeDemoDataset(supabase: Client, userId: string) {
   ]);
 
   // ---- Categories (rev 05 §9: the full preloaded default set) ----
+  // Rev 09 §0.1: upsert keyed on the (user_id, name) unique constraint —
+  // `wipeAllData` above already clears these, but a plain insert isn't
+  // idempotent against any other path that might re-run this (a retry, a
+  // double-submit), which is exactly how they multiplied. Upsert converges
+  // to one row per name no matter how many times this runs.
   const { data: categories, error: catErr } = await supabase
     .from("categories")
-    .insert(
+    .upsert(
       DEFAULT_CATEGORIES.map((c, i) => ({
         user_id: uid,
         sort_order: i,
@@ -294,6 +302,7 @@ async function writeDemoDataset(supabase: Client, userId: string) {
         emoji: c.icon,
         color: c.color,
       })),
+      { onConflict: "user_id,name" },
     )
     .select("id, name");
   if (catErr) throw catErr;

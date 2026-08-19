@@ -21,27 +21,23 @@ export function filterByRange(points: HistoryPoint[], range: RangeKey): HistoryP
 }
 
 export interface NetWorthDelta {
-  allTimePct: number;
+  /** Market-value move within just the selected range, as a dollar amount. */
   rangeAbs: number;
-  rangeDate: string;
+  /** That same move as a percentage of the range's starting value. */
+  rangePct: number;
 }
 
 /**
- * `allTimePct` is growth-over-contribution across the whole history
- * (independent of the selected range); `rangeAbs`/`rangeDate` describe the
- * move within just the selected range, so the second delta line updates as
- * the range selector changes while the first one doesn't.
+ * Rev 09 §2.4: a single delta — both the $ and % move within the
+ * currently selected range (3M/6M/1Y/ALL), sharing one sign/color/arrow.
+ * No all-time figure, no date suffix — those were dropped in the graph
+ * rebuild in favor of one number that updates with the timeframe toggle.
  */
 export function computeDeltas(allPoints: HistoryPoint[], rangePoints: HistoryPoint[]): NetWorthDelta | null {
-  if (allPoints.length === 0) return null;
-  const last = allPoints[allPoints.length - 1];
-  const allTimeGrowth = last.marketValue - last.contributed;
-  const allTimePct = last.contributed > 0 ? (allTimeGrowth / last.contributed) * 100 : 0;
-
-  if (rangePoints.length === 0) {
-    return { allTimePct, rangeAbs: 0, rangeDate: last.date };
-  }
+  if (allPoints.length === 0 || rangePoints.length === 0) return null;
   const rangeFirst = rangePoints[0];
   const rangeLast = rangePoints[rangePoints.length - 1];
-  return { allTimePct, rangeAbs: rangeLast.marketValue - rangeFirst.marketValue, rangeDate: rangeLast.date };
+  const rangeAbs = rangeLast.marketValue - rangeFirst.marketValue;
+  const rangePct = rangeFirst.marketValue > 0 ? (rangeAbs / rangeFirst.marketValue) * 100 : 0;
+  return { rangeAbs, rangePct };
 }

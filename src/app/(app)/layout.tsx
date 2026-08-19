@@ -5,13 +5,14 @@ import { getSettings } from "@/lib/data/settings";
 import { FloatingAskMoss } from "@/components/FloatingAskMoss";
 import { NavLinks } from "@/components/NavLinks";
 
-// Rev 05 §2: Dashboard (renamed from Today), Budgets removed, Move money
-// relocated into Net worth (§4) instead of living in the global header.
+// Rev 05 §2/Rev 09 §1: Dashboard (renamed from Today), Budgets removed,
+// Move money relocated into Net worth (§4) instead of living in the
+// global header. Rev 09: Income dropped as a top-level page — its content
+// moved into a Transactions sub-tab; Expenses renamed Transactions.
 const NAV = [
   { href: "/today", label: "Dashboard" },
   { href: "/net-worth", label: "Net worth" },
-  { href: "/income", label: "Income" },
-  { href: "/expenses", label: "Bills & expenses" },
+  { href: "/expenses", label: "Transactions" },
   { href: "/sweep", label: "Sweep" },
   { href: "/history", label: "History" },
   { href: "/settings", label: "Settings" },

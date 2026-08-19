@@ -4,7 +4,7 @@ import { useState } from "react";
 import { NetWorthLines } from "@/components/NetWorthLines";
 import { Money } from "@/components/Money";
 import { filterByRange, computeDeltas, type RangeKey } from "@/lib/net-worth-range";
-import { formatMoney, formatShortDateLabel } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
 import type { HistoryPoint } from "@/lib/net-worth";
 import { CARD, CARD_HEADER } from "@/lib/ui";
 
@@ -37,32 +37,18 @@ export function NetWorthHero({ total, points }: { total: number; points: History
 
       <Money value={total} size="section" className="mt-2" />
 
+      {/* Rev 09 §2.4: one delta for the selected timeframe — $ and %,
+          same sign/color/arrow, no date suffix. Legend moved into
+          NetWorthLines itself (bottom-centered, under the plot). */}
       {deltas && (
-        <p className="mt-1.5 flex flex-wrap items-center gap-x-3 text-[13.5px] text-ink-2">
-          <span className={deltas.allTimePct >= 0 ? "text-good" : "text-bad"}>
-            {deltas.allTimePct >= 0 ? "▲" : "▼"} {Math.abs(deltas.allTimePct).toFixed(1)}% all time
-          </span>
-          <span className={deltas.rangeAbs >= 0 ? "text-good" : "text-bad"}>
-            {deltas.rangeAbs >= 0 ? "▲" : "▼"} {formatMoney(Math.abs(deltas.rangeAbs))} on{" "}
-            {formatShortDateLabel(deltas.rangeDate)}
-          </span>
+        <p className={`mt-1.5 text-[13.5px] font-medium ${deltas.rangeAbs >= 0 ? "text-good" : "text-bad"}`}>
+          {deltas.rangeAbs >= 0 ? "▲" : "▼"} {deltas.rangeAbs >= 0 ? "+" : "−"}
+          {formatMoney(Math.abs(deltas.rangeAbs))} · {deltas.rangeAbs >= 0 ? "+" : "−"}
+          {Math.abs(deltas.rangePct).toFixed(1)}%
         </p>
       )}
 
-      {/* Rev 08 #4: legend sits above-right of the graph (was a
-          left-aligned row that read as top-left-over-the-plot). */}
-      <div className="mt-4 flex items-center justify-end gap-3 text-[12px] text-ink-3">
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block h-1.5 w-3 rounded-full bg-good" aria-hidden />
-          Market value
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block h-1.5 w-3 rounded-full bg-contributed" aria-hidden />
-          Contribution
-        </span>
-      </div>
-
-      <div className="mt-2 flex-1 -mx-4">
+      <div className="mt-3 flex-1 -mx-4">
         <NetWorthLines points={rangePoints} variant="full" />
       </div>
     </section>

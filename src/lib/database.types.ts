@@ -66,6 +66,7 @@ export interface Database {
         apr_pct: number | null;
         annual_contribution_limit: number | null;
         icon: string | null;
+        institution: string | null;
         min_cash: number | null;
         balance_updated_at: string | null;
         last4: string | null;

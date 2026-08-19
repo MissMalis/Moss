@@ -605,6 +605,15 @@ create index if not exists transfers_date_idx on transfers (transfer_date);
 -- card_charges automatically so Sweep's existing pending/reconciliation
 -- plumbing keeps working unchanged.
 alter table purchases add column if not exists card_id uuid references cards on delete set null;
+
+-- Self-healing before the constraint below: normalizes any row left over
+-- from an older payment-source model (or bad manual data) to 'checking' —
+-- the same fallback the app itself uses for an unrecognized value
+-- (see isPaymentSource() in src/lib/actions/income.ts). Without this, a
+-- single stale row blocks re-running this file at all.
+update purchases set payment_source = 'checking'
+where payment_source not in ('checking', 'investing', 'stored_value', 'rewards_card');
+
 alter table purchases drop constraint if exists purchases_payment_source_check;
 alter table purchases add constraint purchases_payment_source_check
   check (payment_source in ('checking', 'investing', 'stored_value', 'rewards_card'));
@@ -708,3 +717,73 @@ alter table accounts add column if not exists loan_term_months integer;
 -- card?" toggle -> card type dropdown + last 4, already on
 -- debit_card_last4).
 alter table accounts add column if not exists debit_card_network text;
+
+-- ============================================================
+-- Moss — Revision 09
+-- ============================================================
+
+-- §0.1/§0.2: root cause of both the duplicate-category seed bug and the
+-- category-delete crash. `categories` had no unique key, so re-running the
+-- demo seed's plain insert multiplied every row on each run instead of
+-- converging; `recurring_items.category_id` / `card_charges.category_id`
+-- had no ON DELETE behavior, so Postgres's default (block the delete with
+-- a raw FK-violation error) fired whenever a bill/charge referenced the
+-- category being deleted.
+
+-- De-dupe any categories the old bug already created before the unique
+-- constraint below can be added — keeps the lowest id per (user_id, name),
+-- drops the rest. Anything that referenced a dropped duplicate falls back
+-- to "no category" via the ON DELETE SET NULL added next, not an error.
+delete from categories a using categories b
+where a.user_id = b.user_id and a.name = b.name and a.id > b.id;
+
+-- Re-point both FKs to SET NULL on delete (findable by relation, not by a
+-- guessed constraint name, since Postgres's auto-generated name isn't
+-- guaranteed) so deleting a category detaches it from anything that used
+-- it instead of throwing.
+do $$
+declare
+  con record;
+begin
+  for con in
+    select conname from pg_constraint
+    where conrelid = 'recurring_items'::regclass
+      and confrelid = 'categories'::regclass
+      and contype = 'f'
+  loop
+    execute format('alter table recurring_items drop constraint %I', con.conname);
+  end loop;
+end $$;
+
+alter table recurring_items
+  add constraint recurring_items_category_id_fkey
+  foreign key (category_id) references categories on delete set null;
+
+do $$
+declare
+  con record;
+begin
+  for con in
+    select conname from pg_constraint
+    where conrelid = 'card_charges'::regclass
+      and confrelid = 'categories'::regclass
+      and contype = 'f'
+  loop
+    execute format('alter table card_charges drop constraint %I', con.conname);
+  end loop;
+end $$;
+
+alter table card_charges
+  add constraint card_charges_category_id_fkey
+  foreign key (category_id) references categories on delete set null;
+
+-- Now safe to add — the dedupe above guarantees no existing violation.
+do $$
+begin
+  alter table categories add constraint categories_user_name_unique unique (user_id, name);
+exception
+  when duplicate_object then null;
+end $$;
+
+-- §6.4: financial institution, free text (e.g. "TD Bank") — new account field.
+alter table accounts add column if not exists institution text;
