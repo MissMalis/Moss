@@ -2,7 +2,10 @@ import { listCategories, listRecurringItems, listOccurrencesInRange } from "@/li
 import { listIncomeSourcesWithVersions, listPurchasesInRange } from "@/lib/data/income";
 import { listAccounts } from "@/lib/data/accounts";
 import { listCards } from "@/lib/data/cards";
+import { listTransfersInRange } from "@/lib/data/transfers";
 import { getSettings } from "@/lib/data/settings";
+import { isCheckingAccount } from "@/lib/transfers";
+import { LIABILITY_TYPE_SET } from "@/lib/account-types";
 import { createRecurringItem, updateRecurringItem, toggleRecurringItemActive, deleteRecurringItem } from "@/lib/actions/recurring";
 import { buildOccurrencesForWindow, sumEarmarked } from "@/lib/recurring";
 import { windowsAround, findCurrentWindow, findFutureWindows } from "@/lib/today";
@@ -38,7 +41,7 @@ function currentMonthWindow() {
 export default async function RecurringBillsPage() {
   const todayISO = new Date().toISOString().slice(0, 10);
   const { start, end } = currentMonthWindow();
-  const [categories, items, incomeSources, monthPurchases, accounts, cards, settings] = await Promise.all([
+  const [categories, items, incomeSources, monthPurchases, accounts, cards, settings, monthTransfers] = await Promise.all([
     listCategories(),
     listRecurringItems(),
     listIncomeSourcesWithVersions(),
@@ -46,8 +49,10 @@ export default async function RecurringBillsPage() {
     listAccounts(),
     listCards(),
     getSettings(),
+    listTransfersInRange(start, end),
   ]);
   const payableAccounts = buildPayableAccounts(accounts, cards);
+  const liabilityAccounts = accounts.filter((a) => LIABILITY_TYPE_SET.has(a.type));
 
   const primarySource = incomeSources.find((s) => s.freq !== "one-off") ?? null;
   const windows = primarySource ? windowsAround(primarySource, todayISO) : [];
@@ -102,6 +107,20 @@ export default async function RecurringBillsPage() {
     const name = p.category || "Other";
     byCategory.set(name, (byCategory.get(name) ?? 0) + p.amount);
   }
+  // Rev 10 §6.1: a checking-sourced Move-money paydown to a liability
+  // never creates a purchase (see createTransfer) — it's added to the
+  // ring here instead, straight off the transfers table, so "every
+  // dollar out of checking" stays true without double-counting Safe to
+  // spend (already handled by transfersSafeToSpendImpact).
+  const accountById = new Map(accounts.map((a) => [a.id, a]));
+  for (const t of monthTransfers) {
+    const from = accountById.get(t.from_account_id);
+    const to = accountById.get(t.to_account_id);
+    if (!from || !to) continue;
+    if (!isCheckingAccount(from)) continue;
+    if (!LIABILITY_TYPE_SET.has(to.type)) continue;
+    byCategory.set("Debt payment", (byCategory.get("Debt payment") ?? 0) + t.amount);
+  }
   const spendingByCategory = Array.from(byCategory.entries())
     .filter(([, amount]) => amount > 0)
     .map(([name, amount]) => ({
@@ -152,6 +171,19 @@ export default async function RecurringBillsPage() {
                 Day of month
                 <input type="number" min={1} max={31} name="day_of_month" defaultValue={1} className={`w-20 ${INPUT}`} />
               </label>
+              {liabilityAccounts.length > 0 && (
+                <label className={LABEL}>
+                  <span className="flex items-center gap-1">
+                    Pay down a loan?
+                    <Tooltip text="If this bill is a loan payment, pick which one — marking it posted will also reduce that loan's balance, and it's automatically filed under Debt payment." />
+                  </span>
+                  <Dropdown
+                    name="target_liability_account_id"
+                    options={[{ value: "", label: "No — regular bill" }, ...liabilityAccounts.map((a) => ({ value: a.id, label: a.name }))]}
+                    defaultValue=""
+                  />
+                </label>
+              )}
               <label className="flex items-center gap-1 pb-2 text-[12.5px] text-ink-2">
                 <input type="checkbox" name="is_variable" />
                 Variable
@@ -172,114 +204,121 @@ export default async function RecurringBillsPage() {
         </div>
       </div>
 
-      {/* Rev 09 §1.2: Budget moved to its own Transactions sub-tab, so this
-          card no longer needs a grid-mate to match height against. */}
-      <div className="lg:max-w-xl">
+      {/* Rev 10 §7: restored 2×2 — Pay period + Spend analysis side by
+          side, then All bills + This month's expenses side by side. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <PayPeriodToggle
           current={{ window: currentWindow, occurrences: currentPeriodOccurrences, emptyLabel: "Nothing due this period." }}
           next={{ window: nextWindow, occurrences: nextPeriodOccurrences, emptyLabel: "Nothing due next period." }}
           categoryById={categoryById}
           todayISO={todayISO}
         />
-      </div>
 
-      <div className={CARD}>
-        <div className="flex items-center gap-1">
-          <p className={CARD_HEADER}>All bills</p>
-          <Tooltip text="Mark posted confirms a bill cleared (and for variable bills, records the real amount). Edit once changes just this occurrence. Edit going forward changes the recurring default. Skip releases this occurrence's earmark without posting it." />
-        </div>
-        <div className={`mt-3 space-y-1 ${SCROLL_LIST}`}>
-          {items.length === 0 ? (
-            <EmptyState icon={lucideKey("receipt")} title="No recurring bills yet" hint="Add your first one above." />
-          ) : (
-            items.map((item) => {
-              const category = item.category_id ? categoryById.get(item.category_id) : null;
-              const nextDate = nextOccurrenceOnOrAfter({ day: item.day_of_month }, todayISO);
-              return (
-                <StandardRow
-                  key={item.id}
-                  leadingIcon={<IconCircle value={item.icon} label={item.name} variant="solid" />}
-                  name={item.active ? item.name : `${item.name} (inactive)`}
-                  subtitle={<CountdownBadge dateISO={nextDate} todayISO={todayISO} />}
-                  categorySymbol={
-                    category ? <IconCircle value={category.emoji} label={category.name} color={category.color} variant="tinted" size="sm" /> : null
-                  }
-                  estBadge={item.is_variable}
-                  amountNode={<span className="text-ink">{formatMoney(item.amount)}</span>}
-                  dimmed={!item.active}
-                  trailing={
-                    <RowMenu
-                      popovers={[
-                        {
-                          label: "Edit going forward",
-                          content: (
-                            <form action={updateRecurringItem} className="flex flex-col gap-2">
-                              <input type="hidden" name="id" value={item.id} />
-                              <input name="name" defaultValue={item.name} className={INPUT} />
-                              <Dropdown
-                                name="category_id"
-                                options={[{ value: "", label: "No category" }, ...categories.map((c) => ({ value: c.id, label: c.name }))]}
-                                defaultValue={item.category_id ?? ""}
-                              />
-                              <div className="flex items-center gap-2">
-                                <input type="number" step="0.01" name="amount" defaultValue={item.amount} className={`flex-1 ${INPUT}`} />
-                                <input type="number" min={1} max={31} name="day_of_month" defaultValue={item.day_of_month} className={`w-16 ${INPUT}`} />
-                              </div>
-                              <label className="flex items-center gap-1.5 text-[12.5px] text-ink-2">
-                                <input type="checkbox" name="is_variable" defaultChecked={item.is_variable} />
-                                Variable
-                              </label>
-                              <label className="flex items-center gap-1.5 text-[12.5px] text-ink-2">
-                                <input type="checkbox" name="apply_tax" defaultChecked={item.apply_tax} />
-                                Add tax
-                              </label>
-                              <button type="submit" className={BTN_SOLID}>
-                                Save
-                              </button>
-                            </form>
-                          ),
-                        },
-                      ]}
-                    >
-                      <form action={toggleRecurringItemActive}>
-                        <input type="hidden" name="id" value={item.id} />
-                        <input type="hidden" name="active" value={(!item.active).toString()} />
-                        <button type="submit">{item.active ? "Deactivate" : "Activate"}</button>
-                      </form>
-                      <ConfirmDeleteButton
-                        action={deleteRecurringItem}
-                        hiddenFields={{ id: item.id }}
-                        itemLabel={item.name}
-                        variant="link"
-                      />
-                    </RowMenu>
-                  }
-                />
-              );
-            })
-          )}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <div className={CARD}>
-          <p className={CARD_HEADER}>This month&apos;s expenses</p>
-          <div className={`mt-3 ${SCROLL_LIST}`}>
-            {monthGroups.length === 0 ? (
-              <p className="text-[13px] text-ink-3">Nothing logged this month yet.</p>
-            ) : (
-              <RecentList groups={monthGroups} />
-            )}
-          </div>
-        </div>
-
-        <div className={CARD}>
+        <div className={`${CARD} flex h-full flex-col`}>
           <p className={CARD_HEADER}>Spend analysis</p>
           <div className="mt-3">
             {spendingByCategory.length === 0 ? (
               <p className="text-[13px] text-ink-3">Nothing spent yet this month.</p>
             ) : (
               <SpendingRing data={spendingByCategory} />
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className={`${CARD} flex h-full flex-col`}>
+          <div className="flex items-center gap-1">
+            <p className={CARD_HEADER}>All bills</p>
+            <Tooltip text="Mark posted confirms a bill cleared (and for variable bills, records the real amount). Edit once changes just this occurrence. Edit going forward changes the recurring default. Skip releases this occurrence's earmark without posting it." />
+          </div>
+          <div className={`mt-3 space-y-1 ${SCROLL_LIST}`}>
+            {items.length === 0 ? (
+              <EmptyState icon={lucideKey("receipt")} title="No recurring bills yet" hint="Add your first one above." />
+            ) : (
+              items.map((item) => {
+                const category = item.category_id ? categoryById.get(item.category_id) : null;
+                const nextDate = nextOccurrenceOnOrAfter({ day: item.day_of_month }, todayISO);
+                return (
+                  <StandardRow
+                    key={item.id}
+                    leadingIcon={<IconCircle value={item.icon} label={item.name} variant="solid" />}
+                    name={item.active ? item.name : `${item.name} (inactive)`}
+                    subtitle={<CountdownBadge dateISO={nextDate} todayISO={todayISO} />}
+                    categorySymbol={
+                      category ? <IconCircle value={category.emoji} label={category.name} color={category.color} variant="tinted" size="sm" /> : null
+                    }
+                    estBadge={item.is_variable}
+                    amountNode={<span className="text-ink">{formatMoney(item.amount)}</span>}
+                    dimmed={!item.active}
+                    trailing={
+                      <RowMenu
+                        popovers={[
+                          {
+                            label: "Edit going forward",
+                            content: (
+                              <form action={updateRecurringItem} className="flex flex-col gap-2">
+                                <input type="hidden" name="id" value={item.id} />
+                                <input name="name" defaultValue={item.name} className={INPUT} />
+                                <Dropdown
+                                  name="category_id"
+                                  options={[{ value: "", label: "No category" }, ...categories.map((c) => ({ value: c.id, label: c.name }))]}
+                                  defaultValue={item.category_id ?? ""}
+                                />
+                                <div className="flex items-center gap-2">
+                                  <input type="number" step="0.01" name="amount" defaultValue={item.amount} className={`flex-1 ${INPUT}`} />
+                                  <input type="number" min={1} max={31} name="day_of_month" defaultValue={item.day_of_month} className={`w-16 ${INPUT}`} />
+                                </div>
+                                {liabilityAccounts.length > 0 && (
+                                  <Dropdown
+                                    name="target_liability_account_id"
+                                    options={[{ value: "", label: "No — regular bill" }, ...liabilityAccounts.map((a) => ({ value: a.id, label: a.name }))]}
+                                    defaultValue={item.target_liability_account_id ?? ""}
+                                  />
+                                )}
+                                <label className="flex items-center gap-1.5 text-[12.5px] text-ink-2">
+                                  <input type="checkbox" name="is_variable" defaultChecked={item.is_variable} />
+                                  Variable
+                                </label>
+                                <label className="flex items-center gap-1.5 text-[12.5px] text-ink-2">
+                                  <input type="checkbox" name="apply_tax" defaultChecked={item.apply_tax} />
+                                  Add tax
+                                </label>
+                                <button type="submit" className={BTN_SOLID}>
+                                  Save
+                                </button>
+                              </form>
+                            ),
+                          },
+                        ]}
+                      >
+                        <form action={toggleRecurringItemActive}>
+                          <input type="hidden" name="id" value={item.id} />
+                          <input type="hidden" name="active" value={(!item.active).toString()} />
+                          <button type="submit">{item.active ? "Deactivate" : "Activate"}</button>
+                        </form>
+                        <ConfirmDeleteButton
+                          action={deleteRecurringItem}
+                          hiddenFields={{ id: item.id }}
+                          itemLabel={item.name}
+                          variant="link"
+                        />
+                      </RowMenu>
+                    }
+                  />
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        <div className={`${CARD} flex h-full flex-col`}>
+          <p className={CARD_HEADER}>This month&apos;s expenses</p>
+          <div className={`mt-3 ${SCROLL_LIST}`}>
+            {monthGroups.length === 0 ? (
+              <p className="text-[13px] text-ink-3">Nothing logged this month yet.</p>
+            ) : (
+              <RecentList groups={monthGroups} />
             )}
           </div>
         </div>

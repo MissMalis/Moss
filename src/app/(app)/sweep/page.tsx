@@ -72,20 +72,20 @@ export default async function SweepPage() {
     }));
   const rewardsGroups = groupByDate(rewardsTransactions);
 
-  // Rev 09 §7: the Wallet — one entry per spendable/payable account, same
-  // single-source-of-truth `accounts` rows Net worth reads, so an edit
-  // there shows up here on next navigation without a manual sync step.
-  const walletEntries: WalletEntry[] = [...cashAccounts, ...liabilityAccounts]
-    .map((a) => ({
-      id: a.id,
-      name: a.name,
-      type: a.type,
-      icon: a.icon,
-      institution: a.institution,
-      last4: a.last4,
-      balance: a.balance,
-      isChannel: channelingCard?.account_id === a.id,
-    }));
+  // Rev 09 §7/Rev 10 §8.2: the Wallet — cards only (credit cards, the
+  // channel card among them), not bank accounts. Same single-source-of-
+  // truth `accounts` rows Net worth reads, so an edit there shows up here
+  // on next navigation without a manual sync step.
+  const walletEntries: WalletEntry[] = liabilityAccounts.map((a) => ({
+    id: a.id,
+    name: a.name,
+    type: a.type,
+    icon: a.icon,
+    institution: a.institution,
+    last4: a.last4,
+    balance: a.balance,
+    isChannel: channelingCard?.account_id === a.id,
+  }));
 
   return (
     <div className="space-y-6">

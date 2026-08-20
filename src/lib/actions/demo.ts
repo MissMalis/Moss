@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { periodsForMonth } from "@/lib/periods";
 import { DEFAULT_CATEGORIES, lucideKey } from "@/lib/icons";
+import { NET_WORTH_SEED } from "@/lib/demo-net-worth-seed";
+import { ensureDebtPaymentCategory } from "@/lib/liability-payments";
 
 type Client = Awaited<ReturnType<typeof createClient>>;
 
@@ -308,11 +310,26 @@ async function writeDemoDataset(supabase: Client, userId: string) {
   if (catErr) throw catErr;
   const catByName = new Map(categories.map((c) => [c.name, c.id]));
 
+  // Rev 10 §6.2: seeded up front (not left to the first real payment)
+  // purely so the demo shows the feature working immediately.
+  const debtPaymentCategory = await ensureDebtPaymentCategory(supabase, uid);
+  catByName.set(debtPaymentCategory.name, debtPaymentCategory.id);
+
   // ---- Recurring bills (mix of fixed + variable) ----
   const { data: recurring, error: recErr } = await supabase
     .from("recurring_items")
     .insert([
       { user_id: uid, name: "Rent", category_id: catByName.get("Bills"), amount: 1150, day_of_month: 1 },
+      {
+        // Rev 10 §5.3: a real loan-payment bill — marking it posted also
+        // pays down the Car loan liability, same as a Move money paydown.
+        user_id: uid,
+        name: "Car loan payment",
+        category_id: catByName.get("Debt payment"),
+        target_liability_account_id: acctByName.get("Car loan"),
+        amount: 320,
+        day_of_month: 15,
+      },
       {
         user_id: uid,
         name: "PSEG",
@@ -547,13 +564,13 @@ async function writeDemoDataset(supabase: Client, userId: string) {
     if (payErr) throw payErr;
   }
 
-  // ---- Net-worth-over-time: ~12 monthly snapshots per investable account ----
-  const snapshotPlan: { name: string; startContributed: number; startMarket: number; endContributed: number; endMarket: number }[] = [
-    { name: "HSA", startContributed: 200, startMarket: 210, endContributed: 850, endMarket: 900 },
-    { name: "401(k)", startContributed: 24000, startMarket: 33000, endContributed: 30000, endMarket: 42000 },
-    { name: "Roth IRA", startContributed: 6800, startMarket: 7400, endContributed: 8990, endMarket: 150 + 20 * 265 + 45 * 82 },
-    { name: "Taxable Brokerage", startContributed: 5900, startMarket: 6300, endContributed: 6375, endMarket: 15 * 190 + 22 * 265 },
-  ];
+  // ---- Net-worth-over-time: HSA keeps its own small monthly series;
+  // Checking (cash) and 401(k)/Roth IRA/Taxable Brokerage (invested) get
+  // the Rev 10 §2.1 daily series instead — real market-like jitter on the
+  // invested sleeve, a step function on contributions, so the shared
+  // graph reads as an honest consequence of the portfolio's mix instead
+  // of near-straight monthly-interpolated lines. ----
+  const hsaSnapshotPlan = { name: "HSA", startContributed: 200, startMarket: 210, endContributed: 850, endMarket: 900 };
   const snapshotRows: {
     user_id: string;
     account_id: string;
@@ -562,21 +579,54 @@ async function writeDemoDataset(supabase: Client, userId: string) {
     market_value: number;
   }[] = [];
   const MONTHS_OF_HISTORY = 12;
-  for (const plan of snapshotPlan) {
-    const accountId = acctByName.get(plan.name);
-    if (!accountId) continue;
-    for (let m = MONTHS_OF_HISTORY; m >= 1; m--) {
-      const t = 1 - m / MONTHS_OF_HISTORY; // 0 at the oldest point, ~1 near today
-      const date = iso(monthsAgo(today, m));
-      snapshotRows.push({
-        user_id: uid,
-        account_id: accountId,
-        snapshot_date: date,
-        contributed: Math.round(plan.startContributed + (plan.endContributed - plan.startContributed) * t),
-        market_value: Math.round(plan.startMarket + (plan.endMarket - plan.startMarket) * t),
-      });
+  {
+    const accountId = acctByName.get(hsaSnapshotPlan.name);
+    if (accountId) {
+      for (let m = MONTHS_OF_HISTORY; m >= 1; m--) {
+        const t = 1 - m / MONTHS_OF_HISTORY;
+        const date = iso(monthsAgo(today, m));
+        snapshotRows.push({
+          user_id: uid,
+          account_id: accountId,
+          snapshot_date: date,
+          contributed: Math.round(hsaSnapshotPlan.startContributed + (hsaSnapshotPlan.endContributed - hsaSnapshotPlan.startContributed) * t),
+          market_value: Math.round(hsaSnapshotPlan.startMarket + (hsaSnapshotPlan.endMarket - hsaSnapshotPlan.startMarket) * t),
+        });
+      }
     }
   }
+
+  // Proportional split of the invested sleeve across the three real
+  // investment accounts, weighted by their target ending balances — the
+  // three shares always sum back to the seed's `invested` figure exactly,
+  // so the aggregate graph matches the calibrated series regardless of
+  // how the split is weighted, while each account still gets its own
+  // coherent (not flat) sparkline.
+  const investedWeights: { name: string; weight: number }[] = [
+    { name: "401(k)", weight: 42000 },
+    { name: "Roth IRA", weight: 150 + 20 * 265 + 45 * 82 },
+    { name: "Taxable Brokerage", weight: 15 * 190 + 22 * 265 },
+  ];
+  const investedWeightTotal = investedWeights.reduce((s, w) => s + w.weight, 0);
+  const checkingId = acctByName.get("Checking");
+  const investedAccountIds = investedWeights.map((w) => ({ id: acctByName.get(w.name), pct: w.weight / investedWeightTotal }));
+  const seedDaysAgo = NET_WORTH_SEED.length - 1;
+  NET_WORTH_SEED.forEach(([cash, invested, investedContributed], i) => {
+    const date = iso(daysAgo(today, seedDaysAgo - i));
+    if (checkingId) {
+      snapshotRows.push({ user_id: uid, account_id: checkingId, snapshot_date: date, contributed: cash, market_value: cash });
+    }
+    for (const acct of investedAccountIds) {
+      if (!acct.id) continue;
+      snapshotRows.push({
+        user_id: uid,
+        account_id: acct.id,
+        snapshot_date: date,
+        contributed: Math.round(investedContributed * acct.pct * 100) / 100,
+        market_value: Math.round(invested * acct.pct * 100) / 100,
+      });
+    }
+  });
   if (snapshotRows.length > 0) {
     const { error: snapErr } = await supabase
       .from("net_worth_snapshots")

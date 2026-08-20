@@ -15,10 +15,14 @@ import { BTN_SOLID, CARD, CARD_HEADER, INPUT } from "@/lib/ui";
  * used constantly while managing expenses. Rev 09 §3.3: a category
  * backing a budget shows a lock glyph — deleteCategory itself refuses the
  * delete with a labeled message (§0.3), this is just the visible cue.
+ * Rev 10 §6.2: a system category (e.g. "Debt payment") shows the same
+ * lock glyph for the same reason — its name is matched by string
+ * elsewhere, so both delete and rename are blocked (icon/color stay
+ * editable).
  */
 export default async function CategoriesPage() {
   const [categories, budgets] = await Promise.all([listCategories(), listBudgets()]);
-  const lockedNames = new Set(budgets.map((b) => b.category));
+  const budgetLockedNames = new Set(budgets.map((b) => b.category));
 
   return (
     <div className={CARD}>
@@ -31,25 +35,27 @@ export default async function CategoriesPage() {
       ) : (
         <div className="mt-4 flex flex-wrap gap-2">
           {categories.map((c) => {
-            const locked = lockedNames.has(c.name);
+            const budgetLocked = budgetLockedNames.has(c.name);
+            const locked = budgetLocked || c.is_system;
             return (
               <details key={c.id} className="group relative">
                 <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-full border border-border py-1 pl-2 pr-3 text-[13px] text-ink-2 hover:border-border-strong">
                   <IconCircle value={c.emoji} label={c.name} color={c.color} variant="tinted" size="sm" />
                   {c.name}
-                  {locked && <Lock size={11} strokeWidth={2} className="text-ink-3" aria-label="Locked by a budget" />}
+                  {locked && <Lock size={11} strokeWidth={2} className="text-ink-3" aria-label={budgetLocked ? "Locked by a budget" : "Managed by Moss"} />}
                 </summary>
                 <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-lg border border-border bg-card p-3 shadow-lg">
                   <form action={updateCategory} className="flex items-center gap-2">
                     <input type="hidden" name="id" value={c.id} />
                     <IconPicker name="emoji" label={c.name} defaultValue={c.emoji} colorName="color" defaultColor={c.color} />
-                    <input name="name" defaultValue={c.name} className={`min-w-0 flex-1 ${INPUT}`} />
+                    <input name="name" defaultValue={c.name} disabled={c.is_system} className={`min-w-0 flex-1 ${INPUT} disabled:text-ink-3`} />
                     <button type="submit" className="text-[12.5px] text-ink-2 transition hover:text-ink">
                       Save
                     </button>
                   </form>
                   <div className="mt-2 flex items-center justify-end gap-1">
-                    {locked && <Tooltip text="This category is used by a budget. Delete the budget first." />}
+                    {budgetLocked && <Tooltip text="This category is used by a budget. Delete the budget first." />}
+                    {c.is_system && <Tooltip text="This category is managed by Moss and can't be deleted or renamed." />}
                     <ConfirmDeleteButton action={deleteCategory} hiddenFields={{ id: c.id }} itemLabel={c.name} variant="link" />
                   </div>
                 </div>

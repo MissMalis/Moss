@@ -7,7 +7,7 @@ import { NetWorthHero } from "@/components/NetWorthHero";
 import { MoveMoneyButton } from "@/components/MoveMoneyButton";
 import { AddAssetButton, AddLiabilityButton } from "@/components/AccountWizard";
 import { NetWorthGroupList, type NetWorthGroupData } from "@/components/NetWorthGroupList";
-import { CARD, CARD_HEADER } from "@/lib/ui";
+import { CARD_HEADER } from "@/lib/ui";
 
 // Rev 05 §4: Rocket-Money nested model — one "Assets" parent whose group
 // rows are Investments/Cash, one "Liabilities" parent whose one group is
@@ -69,6 +69,7 @@ export default async function NetWorthPage() {
         name: a.name,
         icon: a.icon,
         type: a.type,
+        institution: a.institution,
         value: valueById.get(a.id) ?? 0,
         apr: blendedByAccount.get(a.id) ?? a.apr_pct,
         apy: a.apy_pct,
@@ -90,6 +91,7 @@ export default async function NetWorthPage() {
             name: a.name,
             icon: a.icon,
             type: a.type,
+            institution: a.institution,
             value: valueById.get(a.id) ?? 0,
             apr: blendedByAccount.get(a.id) ?? a.apr_pct,
             apy: a.apy_pct,
@@ -114,7 +116,14 @@ export default async function NetWorthPage() {
         <div className="flex items-center justify-end">
           <AddAssetButton incomeSources={incomeSources.map((s) => ({ id: s.id, name: s.name, freq: s.freq }))} />
         </div>
-        <div className={CARD}>
+        {/* Rev 10 §4.2: ~16px corners on Net worth's own cards — the
+            "friendlier" Rocket-Money radius, scoped to this page only (the
+            shared CARD constant elsewhere stays at the standard 12px).
+            Written out rather than appending to CARD, since two
+            conflicting `rounded-*` utilities in one className isn't a
+            reliable override — Tailwind resolves it by generated-CSS
+            order, not by className string order. */}
+        <div className="rounded-2xl border border-border bg-card p-4">
           <div className="flex items-center justify-between gap-3">
             <p className={CARD_HEADER}>Assets</p>
             <Money value={assetsTotal} size="card" />
@@ -133,7 +142,7 @@ export default async function NetWorthPage() {
         <div className="flex items-center justify-end">
           <AddLiabilityButton />
         </div>
-        <div className={CARD}>
+        <div className="rounded-2xl border border-border bg-card p-4">
           <div className="flex items-center justify-between gap-3">
             <p className={CARD_HEADER}>Liabilities</p>
             <Money value={-liabilitiesTotal} size="card" />

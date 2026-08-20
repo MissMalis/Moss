@@ -47,8 +47,11 @@ export function CurrentPeriodCard({
         </div>
         {toggle ?? <Money value={total} size="card" />}
       </div>
-      {toggle && <Money value={total} size="card" className="mt-2" />}
-      <div className={`mt-2 divide-y divide-border ${SCROLL_LIST}`}>
+      {/* Rev 10 §1.1: same title→content token as every other card — this
+          used to be a smaller ad hoc mt-2, one of the drifted gaps §1
+          calls out. */}
+      {toggle && <Money value={total} size="card" className="card-title-to-hero" />}
+      <div className={`card-title-to-hero divide-y divide-border ${SCROLL_LIST}`}>
         {occurrences.length === 0 ? (
           <p className="pt-1 text-[13px] text-ink-3">{emptyLabel}</p>
         ) : (

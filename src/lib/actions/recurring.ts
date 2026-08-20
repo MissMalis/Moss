@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { listRecentActuals } from "@/lib/data/recurring";
 import { rollingAverage } from "@/lib/recurring";
 import { applyTax } from "@/lib/tax";
+import { reduceLiabilityBalance, ensureDebtPaymentCategory } from "@/lib/liability-payments";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -47,27 +48,43 @@ export async function updateCategory(formData: FormData) {
   const color = String(formData.get("color") ?? "").trim() || null;
   if (!id || !name) throw new Error("Name is required");
 
-  const { error } = await supabase.from("categories").update({ name, emoji, color }).eq("id", id);
+  // Rev 10 §6.2: a system category's name is load-bearing (matched by
+  // string elsewhere — see lib/liability-payments.ts) — icon/color stay
+  // editable, but a rename would silently break that matching, so it's
+  // ignored for system rows instead of renaming.
+  const { data: existing, error: lookupErr } = await supabase.from("categories").select("name, is_system").eq("id", id).single();
+  if (lookupErr) throw lookupErr;
+
+  const { error } = await supabase
+    .from("categories")
+    .update({ name: existing.is_system ? existing.name : name, emoji, color })
+    .eq("id", id);
   if (error) throw error;
   revalidate();
 }
 
-// Rev 09 §0.2/§0.3: a category can't be silently dropped if a budget is
-// still keyed to its name (budgets.category is plain text, no FK — the
-// schema can't block this for us) — surface a clear, labeled message
-// instead of letting a delete throw. Bills/charges that reference this
-// category by id fall back to "no category" via ON DELETE SET NULL, not
-// an error (schema.sql, Rev 09 section).
+// Rev 09 §0.2/§0.3/Rev 10 §6.2: a category can't be silently dropped if a
+// budget is still keyed to its name (budgets.category is plain text, no
+// FK — the schema can't block this for us), or if it's a system category
+// (e.g. "Debt payment") Moss itself relies on — surface a clear, labeled
+// message instead of letting a delete throw or silently breaking the
+// money-effects code that matches on the name. Bills/charges that
+// reference a category by id fall back to "no category" via ON DELETE SET
+// NULL, not an error (schema.sql, Rev 09 section).
 export async function deleteCategory(formData: FormData) {
   const { supabase, user } = await requireUser();
   const id = String(formData.get("id") ?? "");
 
   const { data: category, error: lookupErr } = await supabase
     .from("categories")
-    .select("name")
+    .select("name, is_system")
     .eq("id", id)
     .single();
   if (lookupErr) throw lookupErr;
+
+  if (category.is_system) {
+    throw new Error("This category is managed by Moss and can't be deleted.");
+  }
 
   const { data: lockingBudget } = await supabase
     .from("budgets")
@@ -89,12 +106,20 @@ export async function deleteCategory(formData: FormData) {
 export async function createRecurringItem(formData: FormData) {
   const { supabase, user } = await requireUser();
   const name = String(formData.get("name") ?? "").trim();
-  const category_id = String(formData.get("category_id") ?? "") || null;
+  let category_id = String(formData.get("category_id") ?? "") || null;
   const subtotal = Number(formData.get("amount") ?? 0);
   const is_variable = formData.get("is_variable") === "on";
   const day_of_month = Number(formData.get("day_of_month") ?? 1);
   const apply_tax = formData.get("apply_tax") === "on";
+  const target_liability_account_id = String(formData.get("target_liability_account_id") ?? "") || null;
   if (!name) throw new Error("Name is required");
+
+  // Rev 10 §5.3/§6.2: a loan-payment bill is always filed under Debt
+  // payment — overrides whatever the category dropdown had, so the ring
+  // can't drift from the money-effects code that keys off this name.
+  if (target_liability_account_id) {
+    category_id = (await ensureDebtPaymentCategory(supabase, user.id)).id;
+  }
 
   const amount = apply_tax ? applyTax(subtotal, true, await taxRateFor(supabase, user.id)) : subtotal;
 
@@ -106,6 +131,7 @@ export async function createRecurringItem(formData: FormData) {
     is_variable,
     day_of_month,
     apply_tax,
+    target_liability_account_id,
     active: true,
   });
   if (error) throw error;
@@ -117,18 +143,23 @@ export async function updateRecurringItem(formData: FormData) {
   const { supabase, user } = await requireUser();
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
-  const category_id = String(formData.get("category_id") ?? "") || null;
+  let category_id = String(formData.get("category_id") ?? "") || null;
   const subtotal = Number(formData.get("amount") ?? 0);
   const is_variable = formData.get("is_variable") === "on";
   const day_of_month = Number(formData.get("day_of_month") ?? 1);
   const apply_tax = formData.get("apply_tax") === "on";
+  const target_liability_account_id = String(formData.get("target_liability_account_id") ?? "") || null;
   if (!id || !name) throw new Error("Missing item id or name");
+
+  if (target_liability_account_id) {
+    category_id = (await ensureDebtPaymentCategory(supabase, user.id)).id;
+  }
 
   const amount = apply_tax ? applyTax(subtotal, true, await taxRateFor(supabase, user.id)) : subtotal;
 
   const { error } = await supabase
     .from("recurring_items")
-    .update({ name, category_id, amount, is_variable, day_of_month, apply_tax })
+    .update({ name, category_id, amount, is_variable, day_of_month, apply_tax, target_liability_account_id })
     .eq("id", id);
   if (error) throw error;
   revalidate();
@@ -209,6 +240,22 @@ export async function postOccurrence(formData: FormData) {
     posted: true,
     actual_amount,
   });
+
+  // Rev 10 §5.3: a loan-payment bill also pays down the liability it's
+  // linked to, the same amount effect as a Move money paydown — no
+  // purchase/Safe-to-spend change here, since a Bill's money already left
+  // Safe to spend via its earmark the moment the pay-period window opened
+  // (see lib/data/today.ts); creating one here would double-count it. The
+  // ring already picks this up too, automatically, via the bill's own
+  // category on recurring_items — no separate step needed.
+  const { data: item } = await supabase
+    .from("recurring_items")
+    .select("amount, target_liability_account_id")
+    .eq("id", recurring_item_id)
+    .maybeSingle();
+  if (item?.target_liability_account_id) {
+    await reduceLiabilityBalance(supabase, item.target_liability_account_id, actual_amount ?? item.amount);
+  }
 
   if (actual_amount != null) {
     const recentActuals = await listRecentActuals(recurring_item_id, 3);

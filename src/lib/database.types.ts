@@ -133,6 +133,7 @@ export interface Database {
         emoji: string | null;
         color: string | null;
         sort_order: number;
+        is_system: boolean;
         created_at: string;
       }>;
       recurring_items: Row<{
@@ -147,6 +148,7 @@ export interface Database {
         active: boolean;
         icon: string | null;
         apply_tax: boolean;
+        target_liability_account_id: string | null;
         created_at: string;
       }>;
       recurring_occurrences: Row<{

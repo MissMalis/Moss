@@ -91,18 +91,32 @@ export default async function TodayPage() {
         <p className="mt-0.5 text-[15px] text-ink-2">{formatDateRange(window.start, window.end)}</p>
       </div>
 
-      {/* Rev 09 §5.1: Alerts ~30% narrower than the Rev 08 ratio, graph
-          widens to fill the freed space. */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2.7fr_1fr]">
+      {/* Rev 09 §5.1/Rev 10 §3.2: Alerts cut another ~33% narrower (2.7fr
+          → 4.5fr on the graph's side, same 1fr Alerts column, works out to
+          an Alerts column ~33% narrower than Rev 09's ratio), graph widens
+          to fill the freed space. */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[4.5fr_1fr]">
         <NetWorthHero total={netWorth.total} points={historyPoints} />
         <AlertsCard items={reviewItems} />
       </div>
 
-      <section className={CARD}>
-        <div className="flex items-start justify-between gap-3">
+      {/* Rev 10 §1.1: `flex flex-col` is load-bearing, not decorative — Money's
+          root element is an inline <span>, and vertical margin on an inline
+          box has no layout effect at all outside a flex/grid container. Without
+          this, card-title-to-hero silently does nothing here (confirmed by
+          measuring: 20px of incidental line-height spacing, not the real 16px
+          token) even though NetWorthHero's identical class works, because
+          that section already happens to be flex. */}
+      <section className={`${CARD} flex flex-col`}>
+        {/* Rev 10 §1.1: title in its own unsized wrapper — the paycheck
+            button (+ its conditional early-pay subtext) is absolutely
+            positioned so its variable height can never stretch the gap
+            to the hero number below, which is what let this card's gap
+            drift from Net worth's. */}
+        <div className="card-title-row">
           <p className={CARD_HEADER}>Safe to spend</p>
           {!snap.alreadyPosted && (
-            <div className="text-right">
+            <div className="absolute right-0 top-0 text-right">
               <form action={postPaycheck}>
                 <input type="hidden" name="income_source_id" value={snap.primarySource!.id} />
                 <input type="hidden" name="pay_date" value={window.payDate} />
@@ -125,7 +139,7 @@ export default async function TodayPage() {
             </div>
           )}
         </div>
-        <Money value={safeToSpend} size="section" className="mt-2 text-moss" />
+        <Money value={safeToSpend} size="section" className="card-title-to-hero text-moss" />
 
         <div className="ml-[29px] mt-3 inline-flex items-center gap-1.5 rounded-full bg-moss-bg px-3 py-1.5 text-[13px] font-medium text-moss">
           {formatMoney(perDay)}/day · {daysLeft} day{daysLeft === 1 ? "" : "s"} left
@@ -203,7 +217,7 @@ export default async function TodayPage() {
               See all →
             </Link>
           </p>
-          <div className={`mt-3 ${SCROLL_LIST}`}>
+          <div className={`card-title-to-hero ${SCROLL_LIST}`}>
             {recentGroups.length === 0 ? (
               <p className="text-[13px] text-ink-3">Nothing logged recently.</p>
             ) : (
@@ -219,7 +233,7 @@ export default async function TodayPage() {
               See all →
             </Link>
           </p>
-          <div className="mt-3 flex-1">
+          <div className="card-title-to-hero flex-1">
             <UpcomingStrip days={upcomingWeek} />
           </div>
         </section>

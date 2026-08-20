@@ -28,6 +28,14 @@
   --color-moss: #3b5417;
   --color-moss-2: #566907;
   --color-moss-bg: #eef1e3;
+
+  /* Rev 10 §1: the ONE gap between a card's title and its hero number,
+     and the ONE inner content padding for every card — no per-card
+     overrides. --card-pad already matches Tailwind's `p-4` (the CARD/
+     CARD_SOFT/ROW constants in lib/ui.ts), kept as a CSS var so both are
+     driven from a single documented source of truth. */
+  --card-title-to-hero: 16px;
+  --card-pad: 16px;
 }
 
 @theme inline {
@@ -95,4 +103,20 @@ body {
 }
 .scroll-list:hover::-webkit-scrollbar-thumb {
   background: var(--color-border-strong);
+}
+
+/* Rev 10 §1.1: applied to a card's hero-number element (Money) so the gap
+   from its title is identical everywhere, regardless of what — if
+   anything — sits to the title row's right (a button, a toggle, nothing).
+   The title itself must sit in its own unsized wrapper (see
+   .card-title-row) so a taller sibling can never stretch this gap. */
+.card-title-to-hero {
+  margin-top: var(--card-title-to-hero);
+}
+
+/* Rev 10 §1.1: wraps a card's title `<p>` so any absolutely-positioned
+   right-side header content (range toggle, paycheck button) never affects
+   the wrapper's own height — that's what let the two gaps drift apart. */
+.card-title-row {
+  position: relative;
 }

@@ -790,3 +790,20 @@ end $$;
 
 -- §6.4: financial institution, free text (e.g. "TD Bank") — new account field.
 alter table accounts add column if not exists institution text;
+
+-- ============================================================
+-- Moss — Revision 10
+-- ============================================================
+
+-- §6.2: system categories (e.g. "Debt payment") — created lazily by app
+-- code the first time they're needed (lib/liability-payments.ts), not
+-- seeded up front, since every real user needs one, not just the demo.
+-- Blocks deletion the same way a budget-locked category does (§0.3), just
+-- for a different reason — see deleteCategory.
+alter table categories add column if not exists is_system boolean not null default false;
+
+-- §5.3: an optional link from a recurring Bill to the liability account it
+-- pays down — set only for loan-payment bills (the "Pay down a loan?"
+-- field on Add/Edit a bill). ON DELETE SET NULL: removing the liability
+-- account shouldn't delete the bill, just un-link it.
+alter table recurring_items add column if not exists target_liability_account_id uuid references accounts on delete set null;

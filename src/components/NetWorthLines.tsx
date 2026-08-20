@@ -51,6 +51,11 @@ export function NetWorthLines({ points, variant = "full" }: Props) {
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [measuredWidth, setMeasuredWidth] = useState(FALLBACK_WIDTH);
   const [tooltipOffset, setTooltipOffset] = useState({ left: 0, flip: false });
+  // Rev 10 §2.2: the y-axis $ labels overflowed the card edge because the
+  // reserved gutter was a fixed guess, too narrow for wider values (e.g.
+  // "$76k") — measure the actual widest rendered label and grow the left
+  // pad to fit it, instead of guessing a pixel budget.
+  const [yLabelGutter, setYLabelGutter] = useState(0);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -78,6 +83,26 @@ export function NetWorthLines({ points, variant = "full" }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hoverIdx, measuredWidth, points.length]);
 
+  // Rev 10 §2.2: measure the widest rendered y-axis label after paint and
+  // grow the gutter to fit it (with a small buffer) instead of assuming a
+  // fixed character width — robust to any label length/font. Must run
+  // unconditionally (before the early returns below) per the rules of
+  // hooks; it's a no-op whenever the label spans don't exist yet (empty
+  // state, spark variant).
+  useLayoutEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const labels = svg.querySelectorAll<SVGTextElement>("[data-y-label]");
+    if (labels.length === 0) return;
+    let widest = 0;
+    labels.forEach((el) => {
+      widest = Math.max(widest, el.getBBox().width);
+    });
+    const needed = Math.max(0, widest + 8 - PAD.left);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- measuring a real DOM rect after paint, not synchronizing external state; guarded to avoid a redundant re-render once stable.
+    if (Math.abs(needed - yLabelGutter) > 0.5) setYLabelGutter(needed);
+  }, [points, measuredWidth, yLabelGutter]);
+
   if (points.length === 0) {
     return variant === "spark" ? (
       <div className="flex h-[52px] w-[110px] items-center justify-center text-[11px] text-ink-3">
@@ -104,7 +129,10 @@ export function NetWorthLines({ points, variant = "full" }: Props) {
     );
   }
 
-  const { x, y, maxVal, top, bottom } = scale(points, measuredWidth, HEIGHT, PAD);
+  // The label gutter only ever grows the base 24px margin, never shrinks
+  // it — so numbers small enough to fit already keep the spec's ~24px.
+  const pad = { ...PAD, left: PAD.left + yLabelGutter };
+  const { x, y, maxVal, top, bottom } = scale(points, measuredWidth, HEIGHT, pad);
 
   const marketPts: Point[] = points.map((p, i) => [x(i), y(p.marketValue)]);
   const contribPts: Point[] = points.map((p, i) => [x(i), y(p.contributed)]);
@@ -147,7 +175,8 @@ export function NetWorthLines({ points, variant = "full" }: Props) {
         {yTicks.map((t, i) => (
           <text
             key={i}
-            x={PAD.left - 6}
+            data-y-label
+            x={pad.left - 6}
             y={y(t * 1000) + 3}
             textAnchor="end"
             style={{ fontSize: 10, fill: "var(--color-ink-3)", fontFamily: "var(--font-inter)" }}
@@ -208,8 +237,10 @@ export function NetWorthLines({ points, variant = "full" }: Props) {
         </div>
       )}
 
-      {/* Rev 09 §2.3: the ONLY legend — centered beneath the plot. */}
-      <div className="mt-1 flex items-center justify-center gap-4 text-[12px] text-ink-3">
+      {/* Rev 09 §2.3/Rev 10 §2.3: the ONLY legend — centered beneath the
+          plot, with its own breathing room (separate from the plot's own
+          28px bottom pad, which is reserved for the month-tick labels). */}
+      <div className="mt-2.5 flex items-center justify-center gap-4 text-[12px] text-ink-3">
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-1.5 w-3 rounded-full bg-good" aria-hidden />
           Market value

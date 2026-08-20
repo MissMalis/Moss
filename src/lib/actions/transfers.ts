@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { LIABILITY_TYPE_SET } from "@/lib/account-types";
+import { reduceLiabilityBalance, ensureDebtPaymentCategory } from "@/lib/liability-payments";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -19,12 +21,20 @@ function revalidateEverywhere() {
 }
 
 /**
- * Rev 04 §4: Move money between two of the user's own accounts. Relocates
- * real balance (debits `from`, credits `to` — net worth is unchanged
- * either way) and is recorded as a transfer, never a purchase, so it can
- * never leak into spend reports, budgets, or the expense ring. Safe to
- * Spend impact is computed live from the transfers table (see
- * lib/transfers.ts), not stored here.
+ * Rev 04 §4/Rev 10 §5: Move money between two of the user's own accounts —
+ * discretionary movements (funding an account, extra debt paydown, cash
+ * shuffles), as opposed to a scheduled Bill. Debits `from` normally; `to`
+ * is credited normally UNLESS it's a liability, in which case the amount
+ * pays it down instead (crediting a liability the same way as an asset
+ * would make the debt bigger, backwards). Net worth is unchanged either
+ * way (cash ↓ = liability ↓, a wash) — unconditional on funding source,
+ * unlike Safe to spend. Never recorded as a purchase — this stays a
+ * transfer, so Safe to spend keeps coming from the existing
+ * transfersSafeToSpendImpact math (lib/transfers.ts) as the single
+ * source, not a second, double-counted one. The Spend-analysis ring
+ * instead reads checking-sourced liability transfers directly off the
+ * transfers table (see expenses/page.tsx's byCategory), so it can show
+ * this without ever touching Safe to spend.
  */
 export async function createTransfer(formData: FormData) {
   const { supabase, user } = await requireUser();
@@ -47,7 +57,7 @@ export async function createTransfer(formData: FormData) {
 
   const { data: toAccount, error: toErr } = await supabase
     .from("accounts")
-    .select("id, balance")
+    .select("id, type, balance")
     .eq("id", to_account_id)
     .maybeSingle();
   if (toErr) throw toErr;
@@ -68,11 +78,21 @@ export async function createTransfer(formData: FormData) {
     .eq("id", from_account_id);
   if (debitErr) throw debitErr;
 
-  const { error: creditErr } = await supabase
-    .from("accounts")
-    .update({ balance: (toAccount.balance ?? 0) + amount })
-    .eq("id", to_account_id);
-  if (creditErr) throw creditErr;
+  const toIsLiability = LIABILITY_TYPE_SET.has(toAccount.type);
+  if (toIsLiability) {
+    await reduceLiabilityBalance(supabase, to_account_id, amount);
+    // Ensures the category exists (so it shows on Categories, and the
+    // ring can resolve its color/icon) the first time anyone pays down a
+    // liability — the ring itself reads the transfers table directly,
+    // not a purchase, per the note above.
+    await ensureDebtPaymentCategory(supabase, user.id);
+  } else {
+    const { error: creditErr } = await supabase
+      .from("accounts")
+      .update({ balance: (toAccount.balance ?? 0) + amount })
+      .eq("id", to_account_id);
+    if (creditErr) throw creditErr;
+  }
 
   revalidateEverywhere();
 }

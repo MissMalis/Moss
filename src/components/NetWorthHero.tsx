@@ -17,9 +17,13 @@ export function NetWorthHero({ total, points }: { total: number; points: History
 
   return (
     <section className={`${CARD} flex h-full flex-col`}>
-      <div className="flex items-start justify-between gap-3">
+      {/* Rev 10 §1.1: the title lives in its own unsized wrapper — the
+          range toggle is absolutely positioned so its height can never
+          stretch the gap to the hero number below (that's what let this
+          card's gap drift from Safe to spend's). */}
+      <div className="card-title-row">
         <p className={CARD_HEADER}>Net worth</p>
-        <div className="flex items-center gap-1">
+        <div className="absolute right-0 top-0 flex items-center gap-1">
           {RANGES.map((r) => (
             <button
               key={r}
@@ -35,7 +39,7 @@ export function NetWorthHero({ total, points }: { total: number; points: History
         </div>
       </div>
 
-      <Money value={total} size="section" className="mt-2" />
+      <Money value={total} size="section" className="card-title-to-hero" />
 
       {/* Rev 09 §2.4: one delta for the selected timeframe — $ and %,
           same sign/color/arrow, no date suffix. Legend moved into
