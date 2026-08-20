@@ -781,11 +781,14 @@ delete from categories a using categories b
 where a.user_id = b.user_id and a.name = b.name and a.id > b.id;
 
 -- Now safe to add — the dedupe above guarantees no existing violation.
+-- A named UNIQUE constraint collision raises duplicate_table (42P07), not
+-- duplicate_object (42710) — catching only the latter is why re-running
+-- this file after it already succeeded once used to fail.
 do $$
 begin
   alter table categories add constraint categories_user_name_unique unique (user_id, name);
 exception
-  when duplicate_object then null;
+  when duplicate_table or duplicate_object then null;
 end $$;
 
 -- §6.4: financial institution, free text (e.g. "TD Bank") — new account field.
